@@ -1,18 +1,26 @@
 #!/usr/bin/env python3
-"""Toronto Intelligence Platform — Unified Dashboard.
+"""Toronto Traffic Intelligence — Unified Dashboard.
 
-Combines Traffic, DineSafe, and Housing predictions into a single
-interactive Streamlit application with a shared city map, simulation
-tools, commute planner, and cross-domain insights.
+Interactive Streamlit app for the traffic platform: congestion prediction,
+a live VLM camera feed, event simulation, commute planning, next-hour
+nowcasting, a spatio-temporal GNN forecast, and AI tab summaries
+(nemotron-3-super via Ollama).
 
 Run:
   streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0
+  # or: python3 traffic/pipeline.py dashboard
 
-Requires:
-  - Traffic: scripts 01 + 02 (data + model)
-  - DineSafe: scripts 01-04 (data + model)
-  - Housing: scripts 01-04 (data + model)
-  - Optional: VLM results from script 03, Hermes state from script 09
+Data/models are built by the pipeline (run from the repo root, which must
+contain both this file and the traffic/ directory):
+  python3 traffic/pipeline.py build        # data + models
+  python3 traffic/pipeline.py vlm --live   # live camera sweeps (grows VLM history)
+
+Reads (all under traffic/data, resolved relative to this file):
+  - processed/test.parquet, models/*.json      — XGBoost predictions
+  - raw/traffic_cameras.csv                     — camera list
+  - vlm_results/latest_analysis.csv             — most recent VLM sweep
+  - processed/vlm_history.parquet               — cumulative VLM observations
+  - monitor_state/{last_state,latest_nowcast,orchestrator_status,latest_forecast}.json
 """
 
 import streamlit as st
