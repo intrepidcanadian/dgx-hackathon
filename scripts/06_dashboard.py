@@ -12,6 +12,10 @@ import xgboost as xgb
 from pathlib import Path
 from datetime import datetime, timedelta
 import requests
+import sys
+
+sys.path.insert(0, str(Path(__file__).parent))
+from realtime_feeds import fetch_all_realtime
 
 ROOT = Path(__file__).parent.parent
 DATA_DIR = ROOT / "data" / "processed"
@@ -73,13 +77,22 @@ def fetch_live_weather():
         return {"error": str(e)}
 
 
+@st.cache_data(ttl=300)
+def load_realtime():
+    """Fetch real-time bike share data (cached 5 min)."""
+    try:
+        return fetch_all_realtime()
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # ---- Load everything ----
 df = load_data()
 clf, reg, feature_cols = load_model()
 
 # ---- Header ----
 st.title("Toronto Shelter Demand Predictor")
-st.markdown("Predicting tomorrow's shelter occupancy using Toronto Open Data + Environment Canada weather")
+st.markdown("Predicting tomorrow's shelter occupancy using Toronto Open Data + Environment Canada weather + real-time city signals")
 
 # ---- Live weather sidebar ----
 with st.sidebar:
@@ -101,16 +114,28 @@ with st.sidebar:
         st.warning(f"Weather unavailable: {weather['error']}")
 
     st.divider()
+    st.header("Real-Time Bike Share")
+    rt = load_realtime()
+    if "error" not in rt:
+        col1, col2 = st.columns(2)
+        col1.metric("Stations Active", rt["total_stations"])
+        col2.metric("System Usage", f"{rt['system_utilization']}%")
+        st.metric("Bikes Available", f"{rt['total_bikes']:,}")
+        st.caption(f"Updated: {rt['timestamp'].strftime('%H:%M:%S')}")
+    else:
+        st.warning(f"Bike Share unavailable: {rt['error']}")
+
+    st.divider()
     st.header("Filters")
     sectors = ["All"] + sorted(df["SECTOR"].dropna().unique().tolist())
     selected_sector = st.selectbox("Sector", sectors)
 
 # ---- Tab layout ----
-tab1, tab2, tab3, tab4 = st.tabs([
-    "Predictions", "System Overview", "Shelter Detail", "Model Performance"
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "Predictions", "Real-Time Signals", "System Overview", "Shelter Detail", "Model Performance"
 ])
 
-# ---- Tab 1: Predictions ----
+# ---- Tab 1: Predictions (with real-time adjustments) ----
 with tab1:
     st.header("Tomorrow's Predictions")
 
@@ -129,19 +154,42 @@ with tab1:
         latest_data["pred_at_capacity"] = (latest_data["pred_prob"] >= 0.5).astype(int)
         latest_data["pred_occ_rate"] = reg.predict(X)
 
+        # Apply real-time adjustments
+        if "error" not in rt:
+            adjustments = rt["adjustments"]
+            latest_data["rt_adjustment"] = latest_data["LOCATION_NAME"].map(adjustments).fillna(0)
+            latest_data["adjusted_occ_rate"] = (
+                latest_data["pred_occ_rate"] + latest_data["rt_adjustment"]
+            ).clip(0, 120)
+            latest_data["adjusted_at_capacity"] = (
+                (latest_data["adjusted_occ_rate"] >= 100) |
+                (latest_data["pred_at_capacity"] == 1)
+            ).astype(int)
+            has_rt = True
+        else:
+            latest_data["adjusted_occ_rate"] = latest_data["pred_occ_rate"]
+            latest_data["adjusted_at_capacity"] = latest_data["pred_at_capacity"]
+            latest_data["rt_adjustment"] = 0
+            has_rt = False
+
         col1, col2, col3, col4 = st.columns(4)
         n_total = len(latest_data)
-        n_full = latest_data["pred_at_capacity"].sum()
+        n_full = latest_data["adjusted_at_capacity"].sum()
         n_available = n_total - n_full
-        avg_pred = latest_data["pred_occ_rate"].mean()
+        avg_pred = latest_data["adjusted_occ_rate"].mean()
 
         col1.metric("Programs Tracked", n_total)
         col2.metric("Predicted Full", int(n_full), delta=f"{n_full/n_total:.0%}", delta_color="inverse")
         col3.metric("Beds Available", int(n_available))
         col4.metric("Avg Predicted Occupancy", f"{avg_pred:.1f}%")
 
+        if has_rt:
+            n_adjusted = (latest_data["rt_adjustment"] > 0).sum()
+            if n_adjusted > 0:
+                st.info(f"Real-time adjustment applied to {n_adjusted} shelters based on nearby Bike Share activity")
+
         st.subheader("Shelters with Available Beds (Tomorrow)")
-        available = latest_data[latest_data["pred_at_capacity"] == 0].sort_values("pred_occ_rate")
+        available = latest_data[latest_data["adjusted_at_capacity"] == 0].sort_values("adjusted_occ_rate")
         if len(available) > 0:
             display_cols = {
                 "SHELTER_GROUP": "Shelter",
@@ -149,8 +197,10 @@ with tab1:
                 "SECTOR": "Sector",
                 "CAPACITY_ACTUAL_BED": "Capacity",
                 "occ_rate_today": "Today %",
-                "pred_occ_rate": "Predicted %",
-                "pred_prob": "Full Probability",
+                "pred_occ_rate": "Model %",
+                "rt_adjustment": "RT Adj",
+                "adjusted_occ_rate": "Adjusted %",
+                "pred_prob": "Full Prob",
             }
             st.dataframe(
                 available[list(display_cols.keys())]
@@ -158,17 +208,19 @@ with tab1:
                 .style.format({
                     "Capacity": "{:.0f}",
                     "Today %": "{:.1f}",
-                    "Predicted %": "{:.1f}",
-                    "Full Probability": "{:.1%}",
+                    "Model %": "{:.1f}",
+                    "RT Adj": "{:+.1f}",
+                    "Adjusted %": "{:.1f}",
+                    "Full Prob": "{:.1%}",
                 }),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
         else:
             st.error("No shelters predicted to have available beds tomorrow.")
 
         st.subheader("Shelters Predicted at Capacity (Highest Risk)")
-        full = latest_data[latest_data["pred_at_capacity"] == 1].sort_values("pred_prob", ascending=False)
+        full = latest_data[latest_data["adjusted_at_capacity"] == 1].sort_values("pred_prob", ascending=False)
         if len(full) > 0:
             st.dataframe(
                 full[list(display_cols.keys())].head(20)
@@ -176,15 +228,104 @@ with tab1:
                 .style.format({
                     "Capacity": "{:.0f}",
                     "Today %": "{:.1f}",
-                    "Predicted %": "{:.1f}",
-                    "Full Probability": "{:.1%}",
+                    "Model %": "{:.1f}",
+                    "RT Adj": "{:+.1f}",
+                    "Adjusted %": "{:.1f}",
+                    "Full Prob": "{:.1%}",
                 }),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
 
-# ---- Tab 2: System Overview ----
+# ---- Tab 2: Real-Time Signals ----
 with tab2:
+    st.header("Real-Time City Signals")
+
+    if "error" not in rt:
+        st.subheader("Bike Share System Overview")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Stations", rt["total_stations"])
+        col2.metric("Bikes Available", f"{rt['total_bikes']:,}")
+        col3.metric("Docks Available", f"{rt['total_docks']:,}")
+        col4.metric("System Utilization", f"{rt['system_utilization']}%")
+
+        st.subheader("Bike Share Station Map")
+        stations = rt["stations"]
+        st.map(
+            stations.rename(columns={"lat": "latitude", "lon": "longitude"}),
+            size="capacity",
+            color="#0068c9",
+        )
+
+        st.subheader("Shelter Locations + Nearby Bike Activity")
+        features = rt["features"]
+        shelters_with_stations = features[features["nearby_stations"] > 0].copy()
+
+        if len(shelters_with_stations) > 0:
+            shelter_locs = rt["shelters"].copy()
+            shelter_locs = shelter_locs.merge(
+                features[["location_name", "nearby_stations", "utilization_rate", "demand_pressure"]],
+                on="location_name",
+            )
+
+            color_map = {"high": "#ff4b4b", "medium": "#ffa500", "low": "#00cc66"}
+            shelter_locs["color"] = shelter_locs["demand_pressure"].map(color_map)
+
+            st.map(
+                shelter_locs.rename(columns={"lat": "latitude", "lon": "longitude"}),
+                color="color",
+                size=20,
+            )
+
+            st.markdown("**Legend:** :red[High pressure] · :orange[Medium pressure] · :green[Low pressure]")
+
+            st.subheader("Demand Pressure by Shelter")
+            col1, col2, col3 = st.columns(3)
+            pressure_counts = features["demand_pressure"].value_counts()
+            col1.metric("High Pressure", pressure_counts.get("high", 0))
+            col2.metric("Medium Pressure", pressure_counts.get("medium", 0))
+            col3.metric("Low Pressure", pressure_counts.get("low", 0))
+
+            st.dataframe(
+                shelters_with_stations[
+                    ["shelter_group", "sector", "nearby_stations", "nearby_capacity",
+                     "bikes_available", "utilization_rate", "demand_pressure"]
+                ]
+                .sort_values("utilization_rate", ascending=False)
+                .rename(columns={
+                    "shelter_group": "Shelter",
+                    "sector": "Sector",
+                    "nearby_stations": "Nearby Stations",
+                    "nearby_capacity": "Station Capacity",
+                    "bikes_available": "Bikes Available",
+                    "utilization_rate": "Utilization %",
+                    "demand_pressure": "Pressure",
+                }),
+                width="stretch",
+                hide_index=True,
+            )
+        else:
+            st.info("No shelters have bike share stations within 500m radius")
+
+        st.subheader("How Real-Time Signals Work")
+        st.markdown("""
+        **Bike Share as Urban Activity Proxy:**
+        - High bike station utilization near a shelter → more people active in the area
+        - Late-night high utilization → potential indicator of increased shelter demand
+        - The system computes a "demand pressure" score for each shelter based on
+          nearby bike station activity within a 500m radius
+
+        **Prediction Adjustment:**
+        - High pressure shelters: +2-5% occupancy adjustment
+        - Medium pressure shelters: +1-2% occupancy adjustment
+        - Low pressure: no adjustment
+        - Adjustments are applied on top of the XGBoost model predictions
+        """)
+    else:
+        st.error(f"Real-time data unavailable: {rt['error']}")
+
+# ---- Tab 3: System Overview ----
+with tab3:
     st.header("System-Wide Occupancy Trends")
 
     daily_avg = df.groupby("OCCUPANCY_DATE").agg(
@@ -213,8 +354,8 @@ with tab2:
         ).dropna().reset_index()
         st.scatter_chart(weather_occ, x="temp", y="avg_occ", x_label="Temperature (°C)", y_label="Occupancy %")
 
-# ---- Tab 3: Shelter Detail ----
-with tab3:
+# ---- Tab 4: Shelter Detail ----
+with tab4:
     st.header("Individual Shelter Analysis")
 
     shelters = sorted(df["SHELTER_GROUP"].dropna().unique().tolist())
@@ -226,6 +367,18 @@ with tab3:
         locations = shelter_data["LOCATION_NAME"].unique()
         st.markdown(f"**Locations:** {', '.join(locations)}")
         st.markdown(f"**Sectors:** {', '.join(shelter_data['SECTOR'].unique())}")
+
+        # Show real-time context for this shelter
+        if "error" not in rt:
+            shelter_rt = rt["features"][rt["features"]["shelter_group"] == selected_shelter]
+            if len(shelter_rt) > 0 and shelter_rt["nearby_stations"].sum() > 0:
+                st.subheader("Real-Time Context")
+                for _, sr in shelter_rt.iterrows():
+                    if sr["nearby_stations"] > 0:
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Nearby Bike Stations", sr["nearby_stations"])
+                        col2.metric("Station Utilization", f"{sr['utilization_rate']}%")
+                        col3.metric("Demand Pressure", sr["demand_pressure"].upper())
 
         shelter_daily = shelter_data.groupby("OCCUPANCY_DATE").agg(
             avg_occ=("occ_rate_today", "mean"),
@@ -241,8 +394,8 @@ with tab3:
         col2.metric("Days at 100%", f"{(shelter_daily['avg_occ'] >= 100).sum()}")
         col3.metric("Current Capacity", f"{int(shelter_daily['total_cap'].iloc[-1])} beds")
 
-# ---- Tab 4: Model Performance ----
-with tab4:
+# ---- Tab 5: Model Performance ----
+with tab5:
     st.header("Model Performance")
 
     test_data = df[df["OCCUPANCY_DATE"] >= "2026-01-01"].copy()
@@ -277,7 +430,9 @@ with tab4:
 
         st.subheader("Residual Distribution")
         residuals = test_data["target_occ_rate"] - test_data["pred_occ"]
-        st.bar_chart(pd.cut(residuals.dropna(), bins=30).value_counts().sort_index(), y_label="Count", x_label="Prediction Error (%)")
+        hist_vals, hist_edges = np.histogram(residuals.dropna(), bins=30)
+        hist_df = pd.DataFrame({"Prediction Error (%)": [(hist_edges[i] + hist_edges[i+1])/2 for i in range(len(hist_vals))], "Count": hist_vals})
+        st.bar_chart(hist_df, x="Prediction Error (%)", y="Count")
 
         st.subheader("Feature Importance")
         imp = clf.get_score(importance_type="gain")
