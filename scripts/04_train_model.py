@@ -6,6 +6,7 @@ Predicts TOMORROW's occupancy using today's data (no leakage).
 
 import pandas as pd
 import numpy as np
+import json
 from pathlib import Path
 import xgboost as xgb
 from sklearn.metrics import (
@@ -20,19 +21,9 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 train = pd.read_parquet(DATA_DIR / "train.parquet")
 test = pd.read_parquet(DATA_DIR / "test.parquet")
 
-feature_cols = [
-    "day_of_week", "day_of_month", "month", "is_weekend", "day_of_year",
-    "month_sin", "month_cos", "dow_sin", "dow_cos",
-    "sector_enc", "program_model_enc",
-    "CAPACITY_ACTUAL_BED", "occ_rate_today", "occupied_today",
-    "spare_beds_today", "unavail_ratio_today",
-    "occ_rate_lag_1", "occ_rate_lag_3", "occ_rate_lag_7", "occ_rate_lag_14",
-    "occ_rate_roll_3", "occ_rate_roll_7", "occ_rate_roll_14", "occ_rate_roll_30",
-    "occ_rate_std_3", "occ_rate_std_7", "occ_rate_std_14", "occ_rate_std_30",
-    "occ_trend_3d", "occ_trend_7d", "occ_rate_delta_1d",
-    "at_cap_today", "at_cap_yesterday", "at_cap_rate_7d", "at_cap_rate_30d",
-    "program_hist_mean", "program_hist_at_cap_rate",
-]
+with open(DATA_DIR / "feature_cols.json") as f:
+    feature_cols = json.load(f)
+print(f"Loaded {len(feature_cols)} features")
 
 X_train = train[feature_cols].values.astype(np.float32)
 X_test = test[feature_cols].values.astype(np.float32)
