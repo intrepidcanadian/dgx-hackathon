@@ -1215,7 +1215,7 @@ with tab_cameras:
             fc1, fc2, fc3 = st.columns([2, 1, 1])
             search = fc1.text_input("Filter by road name", key="cam_search")
             only_analyzed = fc2.checkbox("VLM-analyzed only", value=(n_analyzed > 0))
-            n_show = fc3.slider("Cameras to show", 6, 60, 12, 6)
+            n_show = fc3.slider("Cameras to show", 6, 336, 12, 6)
 
             view = cams
             if search:
