@@ -308,13 +308,28 @@ def load_traffic():
 
 @st.cache_data(ttl=3600)
 def load_dinesafe():
-    """Load DineSafe model and predictions."""
+    """Load DineSafe model, predictions, and feature importances."""
     try:
-        test = pd.read_parquet(DINESAFE_DATA / "test_predictions.parquet")
+        import xgboost as xgb
+        test = pd.read_parquet(DINESAFE_DATA / "test_final.parquet")
         test["inspection_date"] = pd.to_datetime(test["inspection_date"])
-        with open(DINESAFE_MODELS / "model_metadata.json") as f:
+        with open(DINESAFE_MODELS / "model_final_metadata.json") as f:
             meta = json.load(f)
-        return {"test": test, "meta": meta, "available": True}
+
+        # Load the risk model and pull per-feature importance (gain) so the
+        # dashboard can surface *what drives* a prediction (pest, 311, fire...).
+        importance = {}
+        try:
+            booster = xgb.Booster()
+            booster.load_model(str(DINESAFE_MODELS / "xgb_risk_final.json"))
+            importance = booster.get_score(importance_type="gain")
+        except Exception:
+            booster = None
+
+        return {
+            "test": test, "meta": meta, "booster": booster,
+            "importance": importance, "available": True,
+        }
     except Exception as e:
         return {"available": False, "error": str(e)}
 
@@ -752,10 +767,11 @@ if refresh_rate > 0:
 # ============================================================
 # MAIN TABS
 # ============================================================
-(tab_overview, tab_traffic, tab_nowcast, tab_simulate, tab_commute,
+(tab_overview, tab_traffic, tab_cameras, tab_nowcast, tab_simulate, tab_commute,
  tab_dinesafe, tab_housing, tab_analytics, tab_arch) = st.tabs([
     "🛰️ Command Center",
     "🚗 Traffic",
+    "📷 Live Cameras",
     "🔮 Nowcast",
     "🎪 Event Simulation",
     "🧭 Commute Planner",
@@ -1132,6 +1148,109 @@ with tab_traffic:
         st.bar_chart(imp_df.set_index("Feature"), horizontal=True)
     except Exception:
         pass
+
+
+# ============================================================
+# TAB: LIVE CAMERAS — actual camera images + VLM overlay
+# ============================================================
+with tab_cameras:
+    st.header("📷 Live Traffic Cameras")
+    st.caption(
+        "Actual live images from Toronto's 336 traffic cameras (refreshed by "
+        "the city every few minutes). Where the VLM monitor has analyzed a "
+        "camera, its congestion classification is overlaid."
+    )
+
+    if not traffic["available"] or traffic.get("cams") is None:
+        st.warning("Camera list not available. Run scripts 01 (data) first.")
+    else:
+        cams = traffic["cams"].copy()
+        # Normalize the image-url column name across CSV variants
+        url_col = next((c for c in cams.columns
+                        if "image" in c.lower() or "url" in c.lower()), None)
+        main_col = next((c for c in cams.columns if c.upper() == "MAINROAD"), None)
+        cross_col = next((c for c in cams.columns if c.upper() == "CROSSROAD"), None)
+
+        if url_col is None:
+            st.error("No image URL column found in the camera dataset.")
+        else:
+            # Build a location key matching the VLM state file
+            # ("MAINROAD & CROSSROAD"), then attach any VLM analysis.
+            if main_col and cross_col:
+                cams["loc_key"] = (cams[main_col].astype(str).str.strip() + " & "
+                                   + cams[cross_col].astype(str).str.strip())
+            else:
+                cams["loc_key"] = cams.index.astype(str)
+
+            hermes_state = traffic.get("hermes") or {}
+            LEVEL_LABELS = {0: "🟢 Free flow", 1: "🟡 Light",
+                            2: "🟠 Moderate", 3: "🔴 Heavy"}
+
+            def vlm_for(loc_key):
+                rec = hermes_state.get(loc_key)
+                return rec if isinstance(rec, dict) else None
+
+            cams["vlm_level"] = cams["loc_key"].map(
+                lambda k: (vlm_for(k) or {}).get("level", -1))
+
+            n_analyzed = int((cams["vlm_level"] >= 0).sum())
+            ts = ""
+            if hermes_state:
+                ts = next((v.get("timestamp", "") for v in hermes_state.values()
+                           if isinstance(v, dict)), "")
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Cameras", f"{len(cams):,}")
+            c2.metric("VLM-Analyzed", f"{n_analyzed:,}")
+            c3.metric("Last VLM Sweep", ts[:16].replace("T", " ") if ts else "—")
+            if n_analyzed == 0:
+                st.info(
+                    "No VLM analysis yet — images below are still live. Run "
+                    "`python3 traffic/scripts/07_hermes_traffic_monitor.py "
+                    "--mode data --cameras 50` (or the orchestrator) on the "
+                    "Spark to overlay congestion levels."
+                )
+
+            # Controls
+            fc1, fc2, fc3 = st.columns([2, 1, 1])
+            search = fc1.text_input("Filter by road name", key="cam_search")
+            only_analyzed = fc2.checkbox("VLM-analyzed only", value=(n_analyzed > 0))
+            n_show = fc3.slider("Cameras to show", 6, 60, 12, 6)
+
+            view = cams
+            if search:
+                view = view[view["loc_key"].str.contains(search, case=False, na=False)]
+            if only_analyzed and n_analyzed > 0:
+                view = view[view["vlm_level"] >= 0]
+            # Show the busiest first when we have levels
+            view = view.sort_values("vlm_level", ascending=False).head(n_show)
+
+            if len(view) == 0:
+                st.warning("No cameras match the current filter.")
+            else:
+                cols_per_row = 3
+                rows = [view.iloc[i:i + cols_per_row]
+                        for i in range(0, len(view), cols_per_row)]
+                for row in rows:
+                    cols = st.columns(cols_per_row)
+                    for col, (_, cam) in zip(cols, row.iterrows()):
+                        with col:
+                            # Cache-bust so each refresh pulls a fresh frame
+                            img_url = f"{cam[url_col]}?t={int(_time.time() // 60)}"
+                            st.image(img_url, width='stretch')
+                            st.markdown(f"**{cam['loc_key']}**")
+                            lvl = int(cam["vlm_level"])
+                            rec = vlm_for(cam["loc_key"]) or {}
+                            if lvl >= 0:
+                                extra = []
+                                if rec.get("vehicles", -1) >= 0:
+                                    extra.append(f"{rec['vehicles']} veh")
+                                if rec.get("flow") and rec["flow"] != "Unknown":
+                                    extra.append(str(rec["flow"]))
+                                suffix = f" · {' · '.join(extra)}" if extra else ""
+                                st.caption(f"{LEVEL_LABELS.get(lvl, lvl)}{suffix}")
+                            else:
+                                st.caption("⚪ Not yet analyzed")
 
 
 # ============================================================
@@ -1516,54 +1635,127 @@ with tab_commute:
 # ============================================================
 with tab_dinesafe:
     if not dinesafe["available"]:
-        st.error(f"DineSafe data not available: {dinesafe.get('error', 'Run scripts 01-04')}")
+        st.error(f"DineSafe data not available: {dinesafe.get('error', 'unknown')}")
+        st.caption(
+            "Expected files: dinesafe/data/processed/test_final.parquet, "
+            "model_final_metadata.json, models/xgb_risk_final.json. "
+            "Regenerate with: `bash deploy_spark.sh dinesafe`."
+        )
     else:
         st.header("Restaurant Inspection Risk Predictor")
 
         ds_test = dinesafe["test"]
         ds_meta = dinesafe["meta"]
+        ds_importance = dinesafe.get("importance", {})
+
+        # Risk score column (probability an inspection fails / finds violations)
+        risk_col = "pred_risk" if "pred_risk" in ds_test.columns else None
 
         # Overview metrics
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("AUC-ROC", f"{ds_meta.get('binary_auc', 0):.4f}")
-        col2.metric("Avg Precision", f"{ds_meta.get('binary_ap', 0):.4f}")
-        col3.metric("Features", len(ds_meta.get("feature_cols", [])))
-        col4.metric("Test Inspections", f"{ds_meta.get('test_size', 0):,}")
+        col1.metric("Risk AUC-ROC", f"{ds_meta.get('risk_auc', 0):.4f}")
+        col2.metric("Avg Precision", f"{ds_meta.get('risk_ap', 0):.4f}")
+        col3.metric("Features", ds_meta.get("total_features", 0))
+        col4.metric("Test Inspections", f"{len(ds_test):,}")
+        st.caption(
+            f"{ds_meta.get('base_features', 0)} base inspection-history features + "
+            f"{len(ds_meta.get('enrichment_features', []))} enrichment factors "
+            "(pest/311/fire/rentsafe/traffic). "
+            f"Severity model MAE {ds_meta.get('severity_mae', 0):.2f}."
+        )
 
-        # Risk distribution
-        if "pred_binary_prob" in ds_test.columns:
+        # --- What drives risk: feature importance over the real factors -------
+        st.subheader("What Drives Risk")
+        st.caption(
+            "Model gain by feature — higher means the factor moves the "
+            "fail-risk prediction more. These are the signals the user asked "
+            "about: pest-violation rates, 311 service requests, fire history."
+        )
+        # Friendly labels for the engineered factor columns
+        FACTOR_LABELS = {
+            "est_rate_pest": "Past pest violations (rate)",
+            "est_rate_sanitation": "Past sanitation violations",
+            "est_rate_temperature": "Past temperature violations",
+            "est_rate_structural": "Past structural violations",
+            "est_rate_training": "Past food-handler training issues",
+            "est_rate_equipment": "Past equipment violations",
+            "est_rate_storage": "Past storage violations",
+            "est_rate_waste": "Past waste-handling violations",
+            "cluster_fail_rate": "Neighbourhood fail rate (geo cluster)",
+            "cluster_n_est": "Establishments in cluster",
+            "cluster_avg_records": "Avg inspections in cluster",
+            "cluster_fail_std": "Cluster fail-rate variability",
+            "sr_fsa_total": "311 service requests (area)",
+            "sr_fsa_pest": "311 pest/rodent complaints (area)",
+            "sr_fsa_food": "311 food complaints (area)",
+            "sr_fsa_property": "311 property-standard complaints (area)",
+            "bodysafe_count": "BodySafe inspections nearby",
+            "bodysafe_fail_rate": "BodySafe fail rate nearby",
+            "fire_violations": "Fire-code violations (area)",
+            "fire_incidents": "Fire incidents (area)",
+            "traffic_vehicle": "Vehicle traffic nearby",
+            "traffic_pedestrian": "Pedestrian traffic nearby",
+            "traffic_points": "Traffic measurement points nearby",
+            "rentsafe_count": "RentSafe buildings nearby",
+            "rentsafe_pest": "RentSafe pest issues nearby",
+            "rentsafe_clean": "RentSafe cleanliness issues nearby",
+        }
+        if ds_importance:
+            imp_df = pd.DataFrame(
+                [(FACTOR_LABELS.get(k, k), v) for k, v in ds_importance.items()],
+                columns=["Factor", "Importance (gain)"],
+            ).sort_values("Importance (gain)", ascending=False).head(18)
+            st.bar_chart(
+                imp_df.set_index("Factor")["Importance (gain)"],
+                color="#ff6600", horizontal=True,
+            )
+        else:
+            st.info("Feature importances unavailable — model booster not loaded.")
+
+        if risk_col:
+            # Risk distribution
             st.subheader("Risk Score Distribution")
-            hist_data = pd.DataFrame({"Fail Probability": ds_test["pred_binary_prob"]})
+            hist_data = pd.DataFrame({"Fail Probability": ds_test[risk_col]})
             st.bar_chart(
                 hist_data["Fail Probability"].value_counts(bins=30).sort_index(),
                 color="#ff6600",
             )
 
-            # High risk establishments
+            # High risk establishments — show the contributing factor columns too
             st.subheader("Highest Risk Establishments")
-            high_risk = ds_test.sort_values("pred_binary_prob", ascending=False).head(20)
-            display_cols = ["est_name", "address", "inspection_date", "pred_binary_prob"]
+            high_risk = ds_test.sort_values(risk_col, ascending=False).head(20)
+            display_cols = ["est_name", "address", "inspection_date", risk_col,
+                            "est_rate_pest", "sr_fsa_pest", "fire_incidents",
+                            "cluster_fail_rate"]
             available_cols = [c for c in display_cols if c in high_risk.columns]
-            st.dataframe(high_risk[available_cols], hide_index=True, width=900)
+            st.dataframe(
+                high_risk[available_cols].rename(columns={
+                    risk_col: "Fail Risk", "est_rate_pest": "Pest Hist",
+                    "sr_fsa_pest": "311 Pest", "fire_incidents": "Fire Inc",
+                    "cluster_fail_rate": "Area Fail Rate"}),
+                hide_index=True, width=1100)
 
             # Map
             st.subheader("Risk Map")
             risk_threshold = st.slider("Minimum risk score", 0.0, 1.0, 0.3, 0.05)
             map_data = ds_test.dropna(subset=["latitude", "longitude"])
-            map_filtered = map_data[map_data["pred_binary_prob"] >= risk_threshold]
+            map_filtered = map_data[map_data[risk_col] >= risk_threshold]
             if len(map_filtered) > 0:
                 st.map(map_filtered[["latitude", "longitude"]].head(500), size=15)
                 st.caption(f"Showing {min(len(map_filtered), 500):,} inspections with risk >= {risk_threshold}")
 
-        # Establishment lookup
+        # Establishment lookup — surface the per-establishment factors
         st.subheader("Lookup Establishment")
         search = st.text_input("Search by name")
         if search and "est_name" in ds_test.columns:
             matches = ds_test[ds_test["est_name"].str.contains(search, case=False, na=False)]
             if len(matches) > 0:
-                display = ["est_name", "address", "inspection_date", "status", "pred_binary_prob"]
-                avail = [c for c in display if c in matches.columns]
-                st.dataframe(matches[avail].head(20), hide_index=True, width=900)
+                display = ["est_name", "address", "inspection_date", "status", risk_col,
+                           "est_rate_pest", "est_rate_sanitation", "sr_fsa_pest",
+                           "sr_fsa_food", "fire_incidents", "rentsafe_pest",
+                           "cluster_fail_rate"]
+                avail = [c for c in display if c and c in matches.columns]
+                st.dataframe(matches[avail].head(20), hide_index=True, width=1200)
             else:
                 st.warning("No matches found.")
 
@@ -1573,7 +1765,14 @@ with tab_dinesafe:
 # ============================================================
 with tab_housing:
     if not housing["available"]:
-        st.error(f"Housing data not available: {housing.get('error', 'Run scripts 01-04')}")
+        st.error(f"Housing data not available: {housing.get('error', 'unknown')}")
+        st.caption(
+            "Expected files: housing/data/processed/{train,test}.parquet, "
+            "feature_cols.json and housing/models/{classifier,regressor}.json. "
+            "Regenerate with: `bash deploy_spark.sh housing` (runs scripts "
+            "01 → 03 → 04 → 05 → 10). If you just generated them, the dashboard "
+            "caches loads for 1h — use the ⟳ menu → Clear cache, or restart."
+        )
     else:
         st.header("Shelter Demand Predictor")
 
