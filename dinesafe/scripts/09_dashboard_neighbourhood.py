@@ -287,7 +287,7 @@ with tab1:
     top_display = top_rest[table_cols].copy()
     top_display.columns = ["Restaurant", "Address", "Last Outcome", "Risk %",
                            *[c.replace("_", " ").title() for c in table_cols[4:]]]
-    st.dataframe(top_display, use_container_width=True, hide_index=True)
+    st.dataframe(top_display, width="stretch", hide_index=True)
 
     st.markdown("---")
 
@@ -345,7 +345,7 @@ with tab1:
                       "status": "Outcome", "pred_risk": "Risk %",
                       "est_rate_pest": "Pest Rate", "est_rate_sanitation": "Sanitation Rate"}
         display_df.columns = [nice_names.get(c, c) for c in table_cols]
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width="stretch", hide_index=True)
 
 
 # ---- Tab 2: Pest vs Failures ----
@@ -396,7 +396,7 @@ with tab2:
             "HIGH PRIORITY — Deploy pest control",
             "Monitor"
         )
-        st.dataframe(pest_rank, use_container_width=True)
+        st.dataframe(pest_rank, width="stretch")
 
 
 # ---- Tab 3: Building Condition ----
@@ -511,7 +511,7 @@ with tab4:
         "Owner": "Toronto Public Health / DineSafe",
     })
 
-    st.dataframe(pd.DataFrame(priorities), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(priorities), width="stretch", hide_index=True)
 
     st.markdown("---")
     st.subheader("What the Model Tells Us")
