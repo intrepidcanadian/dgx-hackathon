@@ -254,18 +254,15 @@ def load_traffic():
         pred_file = TRAFFIC_DATA / "test_predictions.parquet"
         preds = pd.read_parquet(pred_file) if pred_file.exists() else None
 
-        # VLM results
+        # NOTE: the per-sweep VLM artifacts (latest_analysis.csv, last_state.json,
+        # latest_nowcast.json) are intentionally NOT loaded here. They change on
+        # every VLM sweep, and this loader is cached for an hour, which would make
+        # fresh sweeps invisible. They live in load_live_state() (ttl=15s) and are
+        # merged into the traffic dict after the call. Placeholders below keep the
+        # keys present so anything reading `traffic[...]` before the merge is safe.
         vlm = None
-        vlm_file = TRAFFIC_DATA / "vlm_results" / "latest_analysis.csv"
-        if vlm_file.exists():
-            vlm = pd.read_csv(vlm_file)
-
-        # Latest Hermes state
         hermes = None
-        state_file = TRAFFIC_STATE / "last_state.json"
-        if state_file.exists():
-            with open(state_file) as f:
-                hermes = json.load(f)
+        nowcast = None
 
         # Latest commute
         commute = None
@@ -273,13 +270,6 @@ def load_traffic():
         if commute_file.exists():
             with open(commute_file) as f:
                 commute = json.load(f)
-
-        # Nowcast data
-        nowcast = None
-        nowcast_file = TRAFFIC_STATE / "latest_nowcast.json"
-        if nowcast_file.exists():
-            with open(nowcast_file) as f:
-                nowcast = json.load(f)
 
         # VLM-enhanced model (if available)
         vlm_model = None
@@ -308,6 +298,37 @@ def load_traffic():
         }
     except Exception as e:
         return {"available": False, "error": str(e)}
+
+
+@st.cache_data(ttl=15)
+def load_live_state():
+    """Per-sweep VLM artifacts, refreshed every 15s.
+
+    Kept separate from load_traffic() (1h cache) so a new VLM sweep shows up
+    on the next refresh instead of being hidden behind the hour-long cache.
+    Returns the three keys merged into the traffic dict by the caller."""
+    out = {"vlm": None, "hermes": None, "nowcast": None}
+    try:
+        vlm_file = TRAFFIC_DATA / "vlm_results" / "latest_analysis.csv"
+        if vlm_file.exists():
+            out["vlm"] = pd.read_csv(vlm_file)
+    except Exception:
+        pass
+    try:
+        state_file = TRAFFIC_STATE / "last_state.json"
+        if state_file.exists():
+            with open(state_file) as f:
+                out["hermes"] = json.load(f)
+    except Exception:
+        pass
+    try:
+        nowcast_file = TRAFFIC_STATE / "latest_nowcast.json"
+        if nowcast_file.exists():
+            with open(nowcast_file) as f:
+                out["nowcast"] = json.load(f)
+    except Exception:
+        pass
+    return out
 
 
 @st.cache_data(ttl=3600)
@@ -758,6 +779,10 @@ with st.sidebar:
 
     # Project status indicators
     traffic = load_traffic()
+    # Merge in the fresh per-sweep VLM state (15s cache) so new sweeps appear
+    # without waiting for the 1h load_traffic() cache to expire.
+    if traffic.get("available"):
+        traffic.update(load_live_state())
     # DineSafe and Housing/homelessness projects retired from the dashboard.
     # Stubbed as unavailable so every downstream `["available"]` guard hides
     # them without a data load or "not available" error.
@@ -823,7 +848,7 @@ with st.sidebar:
         "Auto-refresh",
         options=[0, 15, 30, 60],
         format_func=lambda x: "Off" if x == 0 else f"Every {x}s",
-        index=0,
+        index=2,  # default to 30s so new VLM sweeps appear automatically
         help="Refresh dashboard to show latest VLM data",
     )
 
