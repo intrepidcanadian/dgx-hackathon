@@ -40,19 +40,26 @@ print(f"Hourly weather features: {len(hourly.columns) - 1} features, {len(hourly
 
 hourly_feature_cols = [c for c in hourly.columns if c != "date"]
 
-# ---- Merge hourly features ----
+# ---- Merge hourly features (skip if already present) ----
 train["OCCUPANCY_DATE"] = pd.to_datetime(train["OCCUPANCY_DATE"])
 test["OCCUPANCY_DATE"] = pd.to_datetime(test["OCCUPANCY_DATE"])
 
-train = train.merge(hourly, left_on="OCCUPANCY_DATE", right_on="date", how="left").drop(columns=["date"])
-test = test.merge(hourly, left_on="OCCUPANCY_DATE", right_on="date", how="left").drop(columns=["date"])
+already_merged = hourly_feature_cols[0] in train.columns
+if already_merged:
+    print("Hourly features already in data — skipping merge")
+else:
+    train = train.merge(hourly, left_on="OCCUPANCY_DATE", right_on="date", how="left").drop(columns=["date"])
+    test = test.merge(hourly, left_on="OCCUPANCY_DATE", right_on="date", how="left").drop(columns=["date"])
 
 print(f"Train after merge: {len(train):,}")
 print(f"Test after merge: {len(test):,}")
 print(f"Hourly features with data (train): {train[hourly_feature_cols].notna().mean().mean():.1%}")
 
-feature_cols = old_feature_cols + hourly_feature_cols
-print(f"\nTotal features: {len(feature_cols)} ({len(old_feature_cols)} original + {len(hourly_feature_cols)} hourly weather)")
+if already_merged:
+    feature_cols = old_feature_cols
+else:
+    feature_cols = old_feature_cols + hourly_feature_cols
+print(f"\nTotal features: {len(feature_cols)}")
 
 X_train = train[feature_cols].values.astype(np.float32)
 X_test = test[feature_cols].values.astype(np.float32)
