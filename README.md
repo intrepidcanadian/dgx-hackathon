@@ -6,11 +6,11 @@ Predict shelter occupancy 1 day ahead using Toronto Open Data and Environment Ca
 
 | Metric | XGBoost (GPU) | LSTM (GPU) |
 |--------|--------------|------------|
-| ROC AUC | 0.93 | TBD |
-| Classification Accuracy | 87% | TBD |
-| Regression MAE | 2.41% | TBD |
-| Predictions within 5% | 87.6% | TBD |
-| Training time | 0.7s | TBD |
+| ROC AUC | **0.93** | 0.91 |
+| Classification Accuracy | **87%** | 86% |
+| Regression MAE | **2.41%** | 3.52% |
+| Predictions within 5% | **87.6%** | 84.2% |
+| Training time | 0.7s | 45.4s |
 
 Test set: 16,412 samples (Jan-May 2026), trained on 108,923 samples (2021-2025).
 
