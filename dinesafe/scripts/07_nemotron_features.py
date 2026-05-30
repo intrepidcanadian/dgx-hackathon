@@ -2,8 +2,8 @@
 """Extract NLP features from DineSafe violation text using Nemotron + GPU clustering.
 
 Requires:
-- Nemotron running on localhost:30000 (llama.cpp OpenAI-compatible API)
-  See: dgx-spark-playbooks/nvidia/nemotron/README.md
+- Ollama running on localhost:11434 with nemotron-3-super or nemotron3 model
+  (auto-detects available models)
 
 Features generated:
 1. Violation risk categories (pest, sanitation, temperature, structural, training, equipment)
@@ -27,7 +27,8 @@ MODEL_DIR = Path(__file__).parent.parent / "models"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 CKAN_API = "https://ckan0.cf.opendata.inter.prod-toronto.ca/api/3/action/datastore_search"
-NEMOTRON_URL = "http://localhost:30000/v1/chat/completions"
+OLLAMA_URL = "http://localhost:11434"
+OLLAMA_CHAT_URL = f"{OLLAMA_URL}/api/chat"
 
 # ============================================================
 # 1. LOAD RAW DINESAFE DATA (need infraction text)
@@ -85,8 +86,30 @@ RISK_CATEGORIES = [
 ]
 
 
+def detect_ollama_model():
+    """Auto-detect best available Nemotron model on Ollama."""
+    try:
+        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        models = r.json().get("models", [])
+        model_names = [m["name"] for m in models]
+        print(f"  Ollama models: {model_names}")
+
+        # Prefer nemotron3 (33B) for speed — nemotron-3-super (123B) is overkill for classification
+        for preferred in ["nemotron3:33b", "nemotron-3-super:latest", "qwen3.6:35b", "gemma4:26b"]:
+            if preferred in model_names:
+                print(f"  Selected: {preferred}")
+                return preferred
+
+        if model_names:
+            print(f"  Fallback to: {model_names[0]}")
+            return model_names[0]
+    except Exception as e:
+        print(f"  Ollama not reachable: {e}")
+    return None
+
+
 def classify_batch_nemotron(texts, batch_size=10):
-    """Classify violation texts into risk categories using Nemotron."""
+    """Classify violation texts into risk categories using Ollama Nemotron."""
     results = {}
     cache_path = PROC_DIR / "violation_classifications.json"
 
@@ -102,12 +125,9 @@ def classify_batch_nemotron(texts, batch_size=10):
 
     print(f"  Classifying {len(unclassified)} violations...")
 
-    # First check if Nemotron is running
-    try:
-        r = requests.get("http://localhost:30000/health", timeout=5)
-        print("  Nemotron server: online")
-    except:
-        print("  Nemotron server: offline — using keyword fallback")
+    model = detect_ollama_model()
+    if not model:
+        print("  Ollama offline — using keyword fallback")
         return classify_keyword_fallback(texts, results)
 
     for i in range(0, len(unclassified), batch_size):
@@ -127,15 +147,15 @@ Violations:
 {batch_text}"""
 
         try:
-            r = requests.post(NEMOTRON_URL, json={
-                "model": "nemotron",
+            r = requests.post(OLLAMA_CHAT_URL, json={
+                "model": model,
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": len(batch) * 20,
-                "temperature": 0.1,
-            }, timeout=120)
+                "stream": False,
+                "options": {"temperature": 0.1, "num_predict": len(batch) * 20},
+            }, timeout=180)
 
             response = r.json()
-            content = response["choices"][0]["message"]["content"]
+            content = response.get("message", {}).get("content", "")
 
             for line in content.strip().split("\n"):
                 line = line.strip().lower()
@@ -148,21 +168,25 @@ Violations:
                             results[text] = cat
                         break
 
-            # Fill any missed ones with keyword fallback
             for text in batch:
                 if text not in results:
                     results[text] = keyword_classify(text)
 
+            classified_so_far = len(results)
             if (i // batch_size) % 5 == 0:
-                print(f"    Classified {min(i + batch_size, len(unclassified))}/{len(unclassified)}")
+                print(f"    Classified {min(i + batch_size, len(unclassified))}/{len(unclassified)} "
+                      f"(total cached: {classified_so_far})")
 
         except Exception as e:
-            print(f"    Nemotron error at batch {i}: {e}")
+            print(f"    Ollama error at batch {i}: {e}")
             for text in batch:
                 if text not in results:
                     results[text] = keyword_classify(text)
 
-        time.sleep(0.1)
+        # Save cache periodically
+        if (i // batch_size) % 10 == 0 and i > 0:
+            with open(cache_path, "w") as f:
+                json.dump(results, f, indent=2)
 
     with open(cache_path, "w") as f:
         json.dump(results, f, indent=2)
