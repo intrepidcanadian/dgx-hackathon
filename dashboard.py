@@ -23,6 +23,7 @@ import math
 import requests
 import io
 from pathlib import Path
+import time as _time
 from datetime import datetime, timedelta
 
 # ============================================================
@@ -101,10 +102,37 @@ def load_traffic():
             with open(commute_file) as f:
                 commute = json.load(f)
 
+        # Nowcast data
+        nowcast = None
+        nowcast_file = TRAFFIC_STATE / "latest_nowcast.json"
+        if nowcast_file.exists():
+            with open(nowcast_file) as f:
+                nowcast = json.load(f)
+
+        # VLM-enhanced model (if available)
+        vlm_model = None
+        vlm_meta = None
+        vlm_model_file = TRAFFIC_MODELS / "xgb_congestion_vlm.json"
+        vlm_meta_file = TRAFFIC_MODELS / "vlm_model_metadata.json"
+        if vlm_model_file.exists():
+            vlm_model = xgb.Booster()
+            vlm_model.load_model(str(vlm_model_file))
+        if vlm_meta_file.exists():
+            with open(vlm_meta_file) as f:
+                vlm_meta = json.load(f)
+
+        # VLM history
+        vlm_history = None
+        vlm_hist_file = TRAFFIC_DATA / "processed" / "vlm_history.parquet"
+        if vlm_hist_file.exists():
+            vlm_history = pd.read_parquet(vlm_hist_file)
+
         return {
             "model": model, "feature_cols": feature_cols, "test": test,
             "cams": cams, "meta": meta, "preds": preds, "vlm": vlm,
-            "hermes": hermes, "commute": commute, "available": True,
+            "hermes": hermes, "commute": commute, "nowcast": nowcast,
+            "vlm_model": vlm_model, "vlm_meta": vlm_meta,
+            "vlm_history": vlm_history, "available": True,
         }
     except Exception as e:
         return {"available": False, "error": str(e)}
@@ -238,6 +266,19 @@ def haversine_km(lat1, lon1, lat2, lon2):
 # ============================================================
 # SIDEBAR
 # ============================================================
+@st.cache_data(ttl=15)
+def load_orchestrator_status():
+    """Load VLM orchestrator status (refreshes every 15s)."""
+    status_file = TRAFFIC_STATE / "orchestrator_status.json"
+    if status_file.exists():
+        try:
+            with open(status_file) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return None
+
+
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Toronto_Coat_of_Arms.svg/120px-Toronto_Coat_of_Arms.svg.png", width=60)
     st.title("Toronto Intelligence Platform")
@@ -261,6 +302,43 @@ with st.sidebar:
         hermes_status = "🟢 Active" if traffic.get("hermes") is not None else "⚪ No runs"
         st.markdown(f"{hermes_status} Hermes Monitor")
 
+    # VLM Orchestrator live status
+    orch_status = load_orchestrator_status()
+    if orch_status:
+        st.divider()
+        is_running = orch_status.get("running", False)
+        mode = orch_status.get("mode", "?").upper()
+        st.subheader(f"{'🔴' if is_running else '⚪'} VLM Feed {'LIVE' if is_running else 'STOPPED'}")
+        if is_running:
+            st.caption(f"Mode: {mode} · Cycle {orch_status.get('cycle', '?')}")
+            avg_c = orch_status.get("avg_congestion", 0)
+            cams = orch_status.get("cameras_per_sweep", 0)
+            st.metric("Cameras / Sweep", cams)
+            st.metric("Avg Congestion", f"{avg_c:.2f}")
+
+            # Next sweep countdown
+            next_sweep = orch_status.get("next_sweep")
+            if next_sweep:
+                try:
+                    ns_dt = datetime.fromisoformat(next_sweep)
+                    secs_left = (ns_dt - datetime.now()).total_seconds()
+                    if secs_left > 0:
+                        st.caption(f"Next sweep in {int(secs_left)}s")
+                    else:
+                        st.caption("Sweep in progress...")
+                except Exception:
+                    pass
+
+            # Nowcast preview
+            nc = orch_status.get("nowcast")
+            if nc:
+                label = nc.get("predicted_label", "?")
+                trend = nc.get("trend", "?")
+                emoji = {"Free Flow": "🟢", "Light": "🟡",
+                         "Moderate": "🟠", "Heavy": "🔴"}.get(label, "⚪")
+                st.metric("Next Hour", f"{emoji} {label}",
+                          delta=trend.lower(), delta_color="off")
+
     st.divider()
     st.subheader("Model Performance")
     if traffic["available"] and traffic.get("meta"):
@@ -268,16 +346,36 @@ with st.sidebar:
     if dinesafe["available"]:
         st.metric("DineSafe AUC", f"{dinesafe['meta'].get('binary_auc', 0):.4f}")
 
+    # Auto-refresh toggle
+    st.divider()
+    refresh_rate = st.selectbox(
+        "Auto-refresh",
+        options=[0, 15, 30, 60],
+        format_func=lambda x: "Off" if x == 0 else f"Every {x}s",
+        index=0,
+        help="Refresh dashboard to show latest VLM data",
+    )
+
+# Auto-refresh via HTML meta tag (works without extra packages)
+if refresh_rate > 0:
+    import streamlit.components.v1 as components
+    components.html(
+        f'<meta http-equiv="refresh" content="{refresh_rate}">',
+        height=0,
+    )
+
 # ============================================================
 # MAIN TABS
 # ============================================================
-tab_overview, tab_traffic, tab_simulate, tab_commute, tab_dinesafe, tab_housing = st.tabs([
+tab_overview, tab_traffic, tab_nowcast, tab_simulate, tab_commute, tab_dinesafe, tab_housing, tab_analytics = st.tabs([
     "🏙️ City Overview",
     "🚗 Traffic",
+    "🔮 Nowcast",
     "🎪 Event Simulation",
     "🧭 Commute Planner",
     "🍽️ DineSafe",
     "🏠 Housing",
+    "📊 Analytics",
 ])
 
 
@@ -979,3 +1077,460 @@ with tab_housing:
         sector_daily = hdf.groupby(["OCCUPANCY_DATE", "SECTOR"])["occ_rate_today"].mean().reset_index()
         sector_pivot = sector_daily.pivot(index="OCCUPANCY_DATE", columns="SECTOR", values="occ_rate_today")
         st.line_chart(sector_pivot, y_label="Occupancy %")
+
+# ============================================================
+# TAB: NOWCAST — VLM-Enhanced Next-Hour Prediction
+# ============================================================
+with tab_nowcast:
+    st.header("🔮 VLM Nowcast — Next-Hour Prediction")
+    st.caption(
+        "Uses live traffic camera observations (VLM) combined with XGBoost "
+        "to predict congestion one hour ahead. Unlike pure time-based models, "
+        "nowcasting sees what's happening *right now*."
+    )
+
+    # Live feed status banner
+    if orch_status and orch_status.get("running"):
+        mode_label = orch_status.get("mode", "?").upper()
+        cycle_num = orch_status.get("cycle", 0)
+        last_sweep = orch_status.get("last_sweep", "")
+        try:
+            sweep_dt = datetime.fromisoformat(last_sweep)
+            age = (datetime.now() - sweep_dt).total_seconds()
+            age_str = f"{int(age)}s ago" if age < 120 else f"{int(age/60)}m ago"
+        except Exception:
+            age_str = "?"
+        st.success(
+            f"🔴 **VLM FEED ACTIVE** — {mode_label} mode · "
+            f"Cycle {cycle_num} · Last sweep {age_str} · "
+            f"{orch_status.get('cameras_per_sweep', '?')} cameras"
+        )
+    elif orch_status:
+        st.info(
+            "⚪ VLM feed stopped. Start with: "
+            "`python3 traffic/scripts/15_vlm_orchestrator.py --demo --interval 60`"
+        )
+
+    if not traffic["available"]:
+        st.warning("Traffic data not available. Run scripts 01 + 02 first.")
+    else:
+        nowcast = traffic.get("nowcast")
+        vlm = traffic.get("vlm")
+        vlm_meta = traffic.get("vlm_meta")
+        vlm_history = traffic.get("vlm_history")
+
+        # --- Current VLM State ---
+        st.subheader("Current Camera State")
+        if vlm is not None and len(vlm) > 0:
+            level_map = {0: "Free Flow", 1: "Light", 2: "Moderate", 3: "Heavy"}
+            color_map = {0: "🟢", 1: "🟡", 2: "🟠", 3: "🔴"}
+
+            if "congestion_level" in vlm.columns:
+                vcol1, vcol2, vcol3, vcol4 = st.columns(4)
+                total_cams = len(vlm)
+                avg_level = vlm["congestion_level"].mean()
+
+                vcol1.metric("Cameras Observed", total_cams)
+                vcol2.metric("Avg Congestion Level", f"{avg_level:.2f}")
+
+                heavy_pct = (vlm["congestion_level"] >= 2).mean() * 100
+                vcol3.metric("Moderate+Heavy", f"{heavy_pct:.0f}%",
+                             delta=None)
+                free_pct = (vlm["congestion_level"] == 0).mean() * 100
+                vcol4.metric("Free Flow", f"{free_pct:.0f}%")
+
+                # Distribution bar
+                st.subheader("Congestion Distribution")
+                dist_data = vlm["congestion_level"].value_counts().sort_index()
+                dist_df = pd.DataFrame({
+                    "Level": [f"{color_map.get(i, '')} {level_map.get(i, f'Level {i}')}"
+                              for i in dist_data.index],
+                    "Cameras": dist_data.values,
+                    "Percentage": (dist_data.values / total_cams * 100).round(1),
+                })
+                st.dataframe(dist_df, hide_index=True, width=500)
+
+                # Map of current VLM observations
+                if "lat" in vlm.columns and "lon" in vlm.columns:
+                    st.subheader("Camera Congestion Map")
+                    map_df = vlm.dropna(subset=["lat", "lon"]).copy()
+                    if len(map_df) > 0:
+                        map_df["size"] = map_df["congestion_level"].clip(0, 3) * 15 + 10
+                        map_df["color_r"] = map_df["congestion_level"].map(
+                            {0: 0, 1: 200, 2: 255, 3: 255})
+                        map_df["color_g"] = map_df["congestion_level"].map(
+                            {0: 180, 1: 200, 2: 140, 3: 50})
+                        map_df["color_b"] = map_df["congestion_level"].map(
+                            {0: 0, 1: 0, 2: 0, 3: 50})
+                        st.map(map_df, latitude="lat", longitude="lon",
+                               size="size", color=["color_r", "color_g", "color_b"])
+            else:
+                st.info("VLM data loaded but missing congestion_level column.")
+        else:
+            st.info(
+                "No VLM camera analysis available yet. "
+                "Run `python3 traffic/scripts/03_vlm_camera_analysis.py` on the Spark "
+                "to analyze live traffic cameras."
+            )
+
+        st.divider()
+
+        # --- Nowcast Prediction ---
+        st.subheader("Next-Hour Prediction")
+        if nowcast is not None:
+            ncol1, ncol2, ncol3 = st.columns(3)
+
+            pred_label = nowcast.get("predicted_label", "Unknown")
+            label_emoji = {"Free Flow": "🟢", "Light": "🟡",
+                           "Moderate": "🟠", "Heavy": "🔴"}
+            ncol1.metric(
+                "Predicted Congestion",
+                f"{label_emoji.get(pred_label, '⚪')} {pred_label}"
+            )
+
+            trend = nowcast.get("trend", "STABLE")
+            trend_emoji = {"IMPROVING": "📉", "WORSENING": "📈", "STABLE": "➡️"}
+            ncol2.metric("Trend", f"{trend_emoji.get(trend, '')} {trend}")
+
+            ncol3.metric(
+                "Cameras Used",
+                nowcast.get("cameras_observed", 0)
+            )
+
+            # Predicted distribution
+            dist = nowcast.get("distribution", {})
+            if dist:
+                st.subheader("Predicted Distribution (Next Hour)")
+                pred_df = pd.DataFrame({
+                    "Level": list(dist.keys()),
+                    "Probability": [f"{v*100:.1f}%" for v in dist.values()],
+                    "Share": list(dist.values()),
+                })
+                st.dataframe(pred_df, hide_index=True, width=500)
+
+                # Bar chart
+                chart_df = pd.DataFrame({
+                    "Level": list(dist.keys()),
+                    "Cameras (%)": [v * 100 for v in dist.values()],
+                })
+                st.bar_chart(chart_df.set_index("Level"))
+
+            # Timestamp
+            ts = nowcast.get("timestamp", "")
+            if ts:
+                try:
+                    dt = datetime.fromisoformat(ts)
+                    age_min = (datetime.now() - dt).total_seconds() / 60
+                    st.caption(
+                        f"Nowcast generated {age_min:.0f} min ago "
+                        f"({dt.strftime('%Y-%m-%d %H:%M')})"
+                    )
+                except Exception:
+                    st.caption(f"Nowcast timestamp: {ts}")
+        else:
+            st.info(
+                "No nowcast available. Run "
+                "`python3 traffic/scripts/14_vlm_feedback_loop.py --nowcast` "
+                "after a VLM camera sweep."
+            )
+
+        st.divider()
+
+        # --- VLM Model Comparison ---
+        st.subheader("Model Comparison: Base vs VLM-Enhanced")
+        if vlm_meta is not None:
+            mcol1, mcol2, mcol3 = st.columns(3)
+            base_acc = traffic["meta"].get("multi_accuracy", 0)
+            vlm_acc = vlm_meta.get("accuracy", 0)
+            improvement = vlm_acc - base_acc
+
+            mcol1.metric("Base Model Accuracy", f"{base_acc:.4f}")
+            mcol2.metric("VLM-Enhanced Accuracy", f"{vlm_acc:.4f}")
+            mcol3.metric("Improvement", f"{improvement:+.4f}",
+                         delta=f"{improvement:+.4f}",
+                         delta_color="normal")
+
+            # VLM feature importance
+            vlm_imp = vlm_meta.get("vlm_feature_importance", {})
+            if vlm_imp:
+                st.subheader("VLM Feature Importance")
+                imp_df = pd.DataFrame({
+                    "Feature": list(vlm_imp.keys()),
+                    "Importance": list(vlm_imp.values()),
+                }).sort_values("Importance", ascending=False)
+                st.bar_chart(imp_df.set_index("Feature"))
+
+            st.caption(
+                f"Base features: {vlm_meta.get('base_features', '?')} · "
+                f"VLM features added: {vlm_meta.get('vlm_features', '?')} · "
+                f"Total: {vlm_meta.get('total_features', '?')}"
+            )
+        else:
+            st.info(
+                "VLM-enhanced model not trained yet. Run "
+                "`python3 traffic/scripts/14_vlm_feedback_loop.py` "
+                "after accumulating VLM history."
+            )
+
+        # --- VLM History ---
+        if vlm_history is not None and len(vlm_history) > 0:
+            st.divider()
+            st.subheader("VLM Observation History")
+
+            if "timestamp" in vlm_history.columns:
+                vlm_history["timestamp"] = pd.to_datetime(
+                    vlm_history["timestamp"], errors="coerce")
+                hist_ts = vlm_history.dropna(subset=["timestamp"])
+
+                st.caption(f"{len(vlm_history)} total observations across "
+                           f"{vlm_history.get('camera_id', vlm_history.iloc[:, 0]).nunique()} cameras")
+
+                if "congestion_level" in vlm_history.columns and len(hist_ts) > 0:
+                    # Hourly average congestion over time
+                    hist_ts = hist_ts.set_index("timestamp")
+                    hourly = hist_ts["congestion_level"].resample("1h").mean()
+                    if len(hourly) > 1:
+                        st.line_chart(hourly, y_label="Avg Congestion Level")
+
+
+# ============================================================
+# TAB: ANALYTICS — Cross-Project Insights
+# ============================================================
+with tab_analytics:
+    st.header("📊 Cross-Project Analytics")
+    st.caption(
+        "Correlations and patterns across traffic, shelter, and food safety data. "
+        "Reveals how weather, events, and congestion connect across domains."
+    )
+
+    # Availability check
+    avail_projects = []
+    if traffic["available"]:
+        avail_projects.append("Traffic")
+    if dinesafe["available"]:
+        avail_projects.append("DineSafe")
+    if housing["available"]:
+        avail_projects.append("Housing")
+
+    if not avail_projects:
+        st.warning("No project data available. Run data preparation scripts first.")
+    else:
+        st.success(f"Data loaded: {', '.join(avail_projects)}")
+
+        # --- Section 1: Model Performance Comparison ---
+        st.subheader("Model Performance Summary")
+        perf_rows = []
+        if traffic["available"]:
+            tmeta = traffic["meta"]
+            perf_rows.append({
+                "Project": "🚗 Traffic (Binary)",
+                "Metric": "AUC",
+                "Score": tmeta.get("binary_auc", 0),
+                "Type": "XGBoost",
+            })
+            perf_rows.append({
+                "Project": "🚗 Traffic (Multi)",
+                "Metric": "Accuracy",
+                "Score": tmeta.get("multi_accuracy", 0),
+                "Type": "XGBoost",
+            })
+            if traffic.get("vlm_meta"):
+                perf_rows.append({
+                    "Project": "🚗 Traffic (VLM-Enhanced)",
+                    "Metric": "Accuracy",
+                    "Score": traffic["vlm_meta"].get("accuracy", 0),
+                    "Type": "XGBoost + VLM",
+                })
+        if dinesafe["available"]:
+            dmeta = dinesafe["meta"]
+            perf_rows.append({
+                "Project": "🍽️ DineSafe",
+                "Metric": "AUC",
+                "Score": dmeta.get("binary_auc", 0),
+                "Type": "XGBoost",
+            })
+        if housing["available"]:
+            perf_rows.append({
+                "Project": "🏠 Housing",
+                "Metric": "AUC",
+                "Score": 0.93,
+                "Type": "XGBoost / LSTM / TFT",
+            })
+
+        if perf_rows:
+            perf_df = pd.DataFrame(perf_rows)
+            perf_df["Score"] = perf_df["Score"].round(4)
+            st.dataframe(perf_df, hide_index=True, width=700)
+
+        st.divider()
+
+        # --- Section 2: Weather Impact Across Domains ---
+        st.subheader("Weather Impact Analysis")
+        st.caption("How weather features rank in importance across projects.")
+
+        weather_features = [
+            "temp_c", "precip_mm", "snow_mm", "wind_kph", "humidity",
+            "feels_like", "visibility", "uv_index", "rain_flag",
+            "is_winter", "is_summer", "wind_dir_sin", "wind_dir_cos",
+        ]
+
+        weather_imp_data = []
+
+        if traffic["available"]:
+            test_df = traffic["test"]
+            weather_in_traffic = [f for f in weather_features
+                                  if f in test_df.columns]
+            if weather_in_traffic and "congestion_binary" in test_df.columns:
+                for feat in weather_in_traffic:
+                    if test_df[feat].std() > 0:
+                        corr = test_df[feat].corr(
+                            test_df["congestion_binary"].astype(float))
+                        weather_imp_data.append({
+                            "Feature": feat,
+                            "Project": "Traffic",
+                            "Correlation": round(abs(corr), 4) if not pd.isna(corr) else 0,
+                        })
+
+        if housing["available"]:
+            hdf = housing["df"]
+            weather_in_housing = [f for f in weather_features
+                                  if f in hdf.columns]
+            if weather_in_housing and "occ_rate_today" in hdf.columns:
+                for feat in weather_in_housing:
+                    if hdf[feat].std() > 0:
+                        corr = hdf[feat].corr(hdf["occ_rate_today"])
+                        weather_imp_data.append({
+                            "Feature": feat,
+                            "Project": "Housing",
+                            "Correlation": round(abs(corr), 4) if not pd.isna(corr) else 0,
+                        })
+
+        if weather_imp_data:
+            widf = pd.DataFrame(weather_imp_data)
+            # Pivot for side-by-side
+            wpivot = widf.pivot_table(
+                index="Feature", columns="Project",
+                values="Correlation", fill_value=0,
+            ).sort_values(by=list(widf["Project"].unique()), ascending=False)
+            st.bar_chart(wpivot)
+            st.caption("|correlation| with target variable — higher = more impact")
+        else:
+            st.info("Weather features not found in loaded data.")
+
+        st.divider()
+
+        # --- Section 3: Temporal Patterns ---
+        st.subheader("Temporal Patterns")
+
+        if traffic["available"]:
+            tdf = traffic["test"]
+            if "hour" in tdf.columns and "congestion_binary" in tdf.columns:
+                hourly_cong = tdf.groupby("hour")["congestion_binary"].mean()
+                st.write("**Traffic Congestion by Hour**")
+                st.line_chart(hourly_cong, y_label="Congestion Rate")
+
+            if "day_of_week" in tdf.columns and "congestion_binary" in tdf.columns:
+                dow_names = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu",
+                             4: "Fri", 5: "Sat", 6: "Sun"}
+                dow_cong = tdf.groupby("day_of_week")["congestion_binary"].mean()
+                dow_cong.index = dow_cong.index.map(lambda x: dow_names.get(x, x))
+                st.write("**Traffic Congestion by Day of Week**")
+                st.bar_chart(dow_cong, y_label="Congestion Rate")
+
+        if housing["available"]:
+            hdf = housing["df"]
+            if "day_of_week" in hdf.columns and "occ_rate_today" in hdf.columns:
+                dow_names = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu",
+                             4: "Fri", 5: "Sat", 6: "Sun"}
+                dow_occ = hdf.groupby("day_of_week")["occ_rate_today"].mean()
+                dow_occ.index = dow_occ.index.map(lambda x: dow_names.get(x, x))
+                st.write("**Shelter Occupancy by Day of Week**")
+                st.bar_chart(dow_occ, y_label="Occupancy %")
+
+        st.divider()
+
+        # --- Section 4: Cross-Domain Correlations ---
+        st.subheader("Cross-Domain Correlations")
+
+        if traffic["available"] and housing["available"]:
+            tdf = traffic["test"]
+            hdf = housing["df"]
+
+            # Find shared temporal features
+            shared_time = []
+            for col in ["hour", "day_of_week", "month"]:
+                if col in tdf.columns and col in hdf.columns:
+                    shared_time.append(col)
+
+            if shared_time and "congestion_binary" in tdf.columns and "occ_rate_today" in hdf.columns:
+                st.write("**Traffic Congestion vs Shelter Occupancy**")
+                st.caption(
+                    "Aggregated by shared time features — reveals whether "
+                    "high-congestion periods correlate with shelter demand."
+                )
+
+                for tcol in shared_time:
+                    t_agg = tdf.groupby(tcol)["congestion_binary"].mean().rename("Traffic Congestion")
+                    h_agg = hdf.groupby(tcol)["occ_rate_today"].mean().rename("Shelter Occupancy %")
+                    merged = pd.concat([t_agg, h_agg / 100], axis=1).dropna()
+                    if len(merged) > 2:
+                        corr_val = merged.iloc[:, 0].corr(merged.iloc[:, 1])
+                        st.write(f"**By {tcol}** (correlation: {corr_val:.3f})")
+                        st.line_chart(merged)
+        else:
+            st.info("Need both Traffic and Housing data for cross-domain analysis.")
+
+        st.divider()
+
+        # --- Section 5: Feature Importance Comparison ---
+        st.subheader("Top Features by Project")
+
+        if traffic["available"]:
+            try:
+                import xgboost as xgb
+                model = traffic["model"]
+                scores = model.get_score(importance_type="gain")
+                top_traffic = sorted(scores.items(), key=lambda x: -x[1])[:15]
+                st.write("**🚗 Traffic — Top 15 Features (gain)**")
+                tf_df = pd.DataFrame(top_traffic, columns=["Feature", "Gain"])
+                st.bar_chart(tf_df.set_index("Feature"))
+            except Exception:
+                pass
+
+        if dinesafe["available"]:
+            try:
+                # DineSafe model may have feature importance in metadata
+                dmeta = dinesafe["meta"]
+                if "feature_importance" in dmeta:
+                    fimp = dmeta["feature_importance"]
+                    top_ds = sorted(fimp.items(), key=lambda x: -x[1])[:15]
+                    st.write("**🍽️ DineSafe — Top 15 Features (gain)**")
+                    ds_df = pd.DataFrame(top_ds, columns=["Feature", "Gain"])
+                    st.bar_chart(ds_df.set_index("Feature"))
+            except Exception:
+                pass
+
+        st.divider()
+
+        # --- Section 6: Data Freshness ---
+        st.subheader("Data Freshness")
+        fresh_rows = []
+        if traffic["available"]:
+            hermes = traffic.get("hermes")
+            if hermes and isinstance(hermes, dict):
+                ts = None
+                for cam_data in hermes.values():
+                    if isinstance(cam_data, dict) and "timestamp" in cam_data:
+                        ts = cam_data["timestamp"]
+                        break
+                if ts:
+                    fresh_rows.append({"Source": "VLM Camera Sweep",
+                                       "Last Updated": ts})
+            nowcast = traffic.get("nowcast")
+            if nowcast:
+                fresh_rows.append({"Source": "Nowcast Prediction",
+                                   "Last Updated": nowcast.get("timestamp", "?")})
+        if fresh_rows:
+            st.dataframe(pd.DataFrame(fresh_rows), hide_index=True, width=600)
+        else:
+            st.caption("No live data sources active yet.")

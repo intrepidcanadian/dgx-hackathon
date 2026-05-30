@@ -7,7 +7,7 @@ Three ML projects built on Toronto Open Data, designed to run on NVIDIA DGX Spar
 ### [Traffic Intelligence Platform](traffic/)
 Real-time congestion prediction, event simulation, and commute optimization using 346K turning movement counts and 336 live traffic cameras. XGBoost prediction (0.99 AUC) combined with Ollama vision-language models for live camera analysis.
 
-**13 scripts** — data prep, GPU training, VLM camera analysis, Streamlit dashboard, Hermes monitoring with Telegram alerts, event injection simulation with interactive maps, point-to-point routing, daily commute optimization, and live event enrichment from Toronto Open Data.
+**15 scripts** — data prep, GPU training, VLM camera analysis, Streamlit dashboard, Hermes monitoring with Telegram alerts, event injection simulation with interactive maps, point-to-point routing, daily commute optimization, live event enrichment, VLM feedback loop with nowcasting, and continuous VLM orchestrator for live demos.
 
 ### [DineSafe Risk Predictor](dinesafe/)
 Predict restaurant health inspection failures using violation history, 311 complaints, fire incidents, and Nemotron NLP features. Neighbourhood-level knowledge graph via txt2kg for cross-domain insight.

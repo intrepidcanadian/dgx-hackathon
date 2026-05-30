@@ -45,7 +45,9 @@ traffic/
 │   ├── 10_simulate_events.py             # Event injection + folium maps
 │   ├── 11_route_advisor.py               # Point-to-point routing
 │   ├── 12_commute_optimizer.py           # Daily commute optimization
-│   └── 13_enrich_events.py              # Real event data enrichment
+│   ├── 13_enrich_events.py              # Real event data enrichment
+│   ├── 14_vlm_feedback_loop.py          # VLM→model feedback + nowcasting
+│   └── 15_vlm_orchestrator.py           # Continuous VLM sweep + nowcast loop
 ├── data/
 │   ├── raw/                # Traffic cameras, turning movement counts
 │   ├── processed/          # Train/test parquet, feature columns
@@ -142,7 +144,41 @@ python3 scripts/07_hermes_traffic_monitor.py --mode summary --cameras 50
 python3 scripts/09_hermes_actionable_monitor.py --cameras 50
 ```
 
-### 6. Hermes Agent integration
+### 6. VLM feedback loop + nowcasting
+
+```bash
+# Consolidate VLM history + retrain with VLM features
+python3 scripts/14_vlm_feedback_loop.py
+
+# Compare base vs VLM-enhanced model accuracy
+python3 scripts/14_vlm_feedback_loop.py --compare
+
+# Predict next-hour congestion from current VLM state
+python3 scripts/14_vlm_feedback_loop.py --nowcast
+```
+
+### 7. Live VLM feed (demo or production)
+
+```bash
+# Demo mode — synthetic data, no GPU needed, perfect for presentations
+python3 scripts/15_vlm_orchestrator.py --demo --interval 60
+
+# Live mode on DGX Spark — real camera analysis via Ollama
+python3 scripts/15_vlm_orchestrator.py --live --cameras 50 --interval 300
+
+# Quick demo with fast cycles (30s between sweeps)
+python3 scripts/15_vlm_orchestrator.py --demo --interval 30 --cameras 15
+
+# Run 5 cycles and stop
+python3 scripts/15_vlm_orchestrator.py --demo --interval 60 --cycles 5
+```
+
+Open the unified dashboard alongside to see live updates:
+```bash
+streamlit run dashboard.py  # Set auto-refresh to 15s or 30s
+```
+
+### 8. Hermes Agent integration
 
 Ask Hermes to schedule automatic monitoring:
 
