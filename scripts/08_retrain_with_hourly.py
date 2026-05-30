@@ -71,6 +71,7 @@ dtest_cls = xgb.DMatrix(X_test, label=y_test_cls, feature_names=feature_cols)
 clf_params = {
     "objective": "binary:logistic",
     "eval_metric": "auc",
+    "device": "cuda",
     "max_depth": 6,
     "learning_rate": 0.1,
     "subsample": 0.8,
@@ -115,6 +116,7 @@ dtest_reg = xgb.DMatrix(X_test, label=y_test_reg, feature_names=feature_cols)
 reg_params = {
     "objective": "reg:squarederror",
     "eval_metric": "rmse",
+    "device": "cuda",
     "max_depth": 6,
     "learning_rate": 0.1,
     "subsample": 0.8,
