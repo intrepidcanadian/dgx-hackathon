@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 import json
 import altair as alt
+import pydeck as pdk
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "processed"
@@ -106,9 +107,9 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader("Where Should the City Intervene?")
     st.markdown(
-        "Each dot is a ~1km neighbourhood cell. Colour intensity shows "
-        "predicted restaurant failure risk. High-risk areas need infrastructure "
-        "intervention, not just more inspections."
+        "**Large circles** = neighbourhood zones (~1km). "
+        "**Small dots** = individual restaurants. "
+        "Red = high risk, green = low risk. Click a neighbourhood to see its restaurants below."
     )
 
     col1, col2 = st.columns([3, 1])
@@ -120,6 +121,7 @@ with tab1:
             "Pest complaint density",
             "Fire violations",
         ])
+        show_restaurants = st.checkbox("Show individual restaurants", value=True)
 
     grid_filtered = grid[grid["n_establishments"] >= min_est].copy()
 
@@ -134,33 +136,122 @@ with tab1:
         legend = "Fire code violations (area avg)"
 
     grid_filtered["intensity_norm"] = (
-        grid_filtered["intensity"].rank(pct=True)
+        grid_filtered["intensity"].rank(pct=True).fillna(0.5)
+    )
+    grid_filtered["r"] = (grid_filtered["intensity_norm"] * 255).astype(int).clip(0, 255)
+    grid_filtered["g"] = ((1 - grid_filtered["intensity_norm"]) * 200).astype(int).clip(0, 255)
+    grid_filtered["radius"] = 400 + grid_filtered["n_establishments"] * 15
+
+    neighbourhood_layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=grid_filtered,
+        get_position=["lon_bin", "lat_bin"],
+        get_radius="radius",
+        get_fill_color=["r", "g", 50, 100],
+        pickable=True,
+        auto_highlight=True,
     )
 
-    with col1:
-        map_data = grid_filtered.rename(columns={"lat_bin": "latitude", "lon_bin": "longitude"})
-        high_risk = map_data.nlargest(20, "intensity")
-        low_risk = map_data.nsmallest(20, "intensity")
+    layers = [neighbourhood_layer]
 
-        st.markdown(f"**{legend}** — {len(map_data)} neighbourhood cells")
-        st.map(map_data[["latitude", "longitude", "intensity_norm"]],
-               size="intensity_norm", color="#ff4444")
+    rest_data = test_geo.dropna(subset=["latitude", "longitude"]).copy()
+    rest_data["est_name"] = rest_data["est_name"].fillna("Unknown")
+    rest_data["address"] = rest_data["address"].fillna("")
+    rest_data["risk_pct"] = (rest_data["pred_risk"] * 100).round(1)
+    rest_data["r"] = (rest_data["pred_risk"].clip(0, 1) * 255).astype(int)
+    rest_data["g"] = ((1 - rest_data["pred_risk"].clip(0, 1)) * 200).astype(int)
+
+    if show_restaurants:
+        restaurant_layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=rest_data[["latitude", "longitude", "est_name", "address",
+                           "risk_pct", "status", "r", "g"]],
+            get_position=["longitude", "latitude"],
+            get_radius=60,
+            get_fill_color=["r", "g", 50, 200],
+            pickable=True,
+        )
+        layers.append(restaurant_layer)
+
+    center_lat = rest_data["latitude"].median()
+    center_lon = rest_data["longitude"].median()
+
+    with col1:
+        st.markdown(f"**{legend}** — {len(grid_filtered)} neighbourhood cells")
+        st.pydeck_chart(pdk.Deck(
+            layers=layers,
+            initial_view_state=pdk.ViewState(
+                latitude=center_lat, longitude=center_lon,
+                zoom=11, pitch=0,
+            ),
+            tooltip={
+                "html": "<b>{est_name}</b><br/>"
+                        "{address}<br/>"
+                        "Risk: {risk_pct}%<br/>"
+                        "Status: {status}",
+                "style": {"backgroundColor": "#1a1a2e", "color": "white",
+                          "fontSize": "13px"},
+            },
+            map_style="mapbox://styles/mapbox/dark-v10",
+        ))
 
     st.markdown("---")
-    st.subheader("Highest Risk Neighbourhoods")
-    top = grid_filtered.nlargest(10, "avg_risk")
-    display_cols = ["lat_bin", "lon_bin", "n_establishments", "fail_rate",
-                    "avg_risk", "n_failures"]
-    if "sr_pest" in top.columns:
-        display_cols += ["sr_pest", "sr_property"]
-    if "fire_violations" in top.columns:
-        display_cols.append("fire_violations")
-    if "rentsafe_pest" in top.columns:
-        display_cols.append("rentsafe_pest")
 
-    top_display = top[display_cols].copy()
-    top_display.columns = [c.replace("_", " ").title() for c in top_display.columns]
-    st.dataframe(top_display, use_container_width=True)
+    # Neighbourhood drill-down
+    st.subheader("Neighbourhood Drill-Down")
+    st.markdown("Select a neighbourhood to see its restaurants.")
+
+    grid_options = grid_filtered.sort_values("avg_risk", ascending=False).copy()
+    grid_options["label"] = (
+        "Risk " + (grid_options["avg_risk"] * 100).round(1).astype(str) + "% — " +
+        grid_options["n_establishments"].astype(str) + " restaurants @ " +
+        grid_options["lat_bin"].round(3).astype(str) + ", " +
+        grid_options["lon_bin"].round(3).astype(str)
+    )
+
+    selected_hood = st.selectbox(
+        "Neighbourhood (sorted by risk)",
+        grid_options["label"].tolist(),
+    )
+
+    if selected_hood:
+        sel_row = grid_options[grid_options["label"] == selected_hood].iloc[0]
+        sel_lat, sel_lon = sel_row["lat_bin"], sel_row["lon_bin"]
+
+        hood_restaurants = test_geo[
+            (test_geo["lat_bin"] == sel_lat) & (test_geo["lon_bin"] == sel_lon)
+        ].copy()
+
+        col_a, col_b, col_c, col_d = st.columns(4)
+        col_a.metric("Restaurants", f"{hood_restaurants['est_id'].nunique()}")
+        col_b.metric("Failure Rate", f"{sel_row['fail_rate']:.1%}")
+        col_c.metric("Avg Risk Score", f"{sel_row['avg_risk']:.1%}")
+        col_d.metric("Total Failures", f"{int(sel_row['n_failures'])}")
+
+        # Show enrichment signals for this neighbourhood
+        signal_cols = {"sr_pest": "311 Pest Complaints", "sr_property": "311 Property Complaints",
+                       "fire_violations": "Fire Violations", "rentsafe_pest": "RentSafe Pest Issues",
+                       "fire_incidents": "Fire Incidents", "pest_rate": "Pest Violation Rate (NLP)"}
+        signals = {v: f"{sel_row.get(k, 0):.1f}" for k, v in signal_cols.items()
+                   if k in sel_row.index and sel_row.get(k, 0) > 0}
+        if signals:
+            st.markdown("**Neighbourhood signals:** " + " | ".join(
+                f"{k}: {v}" for k, v in signals.items()))
+
+        # Restaurant table
+        rest_display = hood_restaurants.drop_duplicates(subset=["est_id"]).sort_values(
+            "pred_risk", ascending=False
+        )
+        table_cols = ["est_name", "address", "status", "pred_risk"]
+        if "est_rate_pest" in rest_display.columns:
+            table_cols.append("est_rate_pest")
+        if "est_rate_sanitation" in rest_display.columns:
+            table_cols.append("est_rate_sanitation")
+        table_cols = [c for c in table_cols if c in rest_display.columns]
+        display_df = rest_display[table_cols].copy()
+        display_df.columns = [c.replace("_", " ").replace("est ", "").title()
+                              for c in display_df.columns]
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 
 # ---- Tab 2: Pest vs Failures ----
