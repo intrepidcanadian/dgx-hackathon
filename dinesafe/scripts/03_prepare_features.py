@@ -58,7 +58,8 @@ hist_dir = RAW_DIR / "dinesafe_hist" / "2023-04-11 - Dinesafe Historical data"
 hist_dfs = []
 if hist_dir.exists():
     for f in sorted(hist_dir.glob("*.csv")):
-        df = pd.read_csv(f, encoding="latin-1", on_bad_lines="skip")
+        df = pd.read_csv(f, encoding="latin-1", on_bad_lines="skip",
+                            engine="python")
         hist_dfs.append(df)
 
 hist = pd.concat(hist_dfs, ignore_index=True) if hist_dfs else pd.DataFrame()
