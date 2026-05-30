@@ -136,8 +136,8 @@ for t, count in current["typeDesc"].dropna().value_counts().head(15).items():
 
 print(f"\nGeographic coverage:")
 print(f"  Records with lat/lon: {current['latitude'].notna().sum():,} / {len(current):,}")
-lat_range = current["latitude"].dropna()
-lon_range = current["longitude"].dropna()
+lat_range = pd.to_numeric(current["latitude"], errors="coerce").dropna()
+lon_range = pd.to_numeric(current["longitude"], errors="coerce").dropna()
 print(f"  Latitude range: {lat_range.min():.4f} to {lat_range.max():.4f}")
 print(f"  Longitude range: {lon_range.min():.4f} to {lon_range.max():.4f}")
 
