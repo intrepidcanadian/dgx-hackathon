@@ -72,6 +72,44 @@ bash deploy_spark.sh hermes       # Hermes Agent only (~30 min)
 5. **Validation** — checks all model files and data artifacts exist
 6. **Hermes Agent** — interactive install with Telegram bot setup
 
+### Traffic: one-command pipeline (`pipeline.py`)
+
+For the traffic project, a single entry point drives the whole flow so you
+don't have to remember which of the numbered scripts to run, or in what order.
+`deploy_spark.sh` itself calls this under the hood.
+
+```bash
+cd ~/dgx/traffic
+
+python3 pipeline.py build --gpu    # full build: data → enrich → train all models (GPU variants)
+python3 pipeline.py dashboard      # launch the Streamlit dashboard
+python3 pipeline.py all --gpu      # build + dashboard in one go
+```
+
+`build` runs `01 prepare → 08 enrich → 13 events → 02 train → 14 vlm nowcast → 16 gnn`.
+Granular stages are also available:
+
+```bash
+python3 pipeline.py data           # data only (pull + engineer + enrich)
+python3 pipeline.py train --gpu    # models only (XGBoost + VLM nowcast + GNN)
+python3 pipeline.py vlm --live --cameras 50 --interval 300   # continuous VLM camera sweeps
+python3 pipeline.py vlm --demo                               # synthetic VLM feed (no GPU/Ollama)
+python3 pipeline.py nowcast        # recompute next-hour nowcast from current VLM state
+python3 pipeline.py forecast       # emit GNN multi-horizon network forecast
+```
+
+Flags: `--gpu` prefers the RAPIDS/cuML `_gpu` script variants (auto-skips with a
+warning if no `nvidia-smi`); `--no-gpu` forces CPU; `--continue-on-error` keeps
+going if a stage fails. Each stage shells out to its numbered script, so those
+still work standalone for fine-grained control.
+
+To keep the live VLM feed and dashboard running together on the Spark:
+
+```bash
+python3 pipeline.py vlm --live --cameras 50 --interval 300 &   # background sweeps
+python3 pipeline.py dashboard                                  # dashboard (set auto-refresh to 30s)
+```
+
 ### Hermes scheduled tasks
 
 Once Hermes is running, tell it (via terminal or Telegram):
@@ -90,7 +128,7 @@ Data (`data/raw/`, `data/processed/`) and models (`models/`) are gitignored. The
 pip install pandas numpy scikit-learn xgboost pyarrow requests folium streamlit torch
 ```
 
-Run scripts 1–7 in the traffic project (and equivalents in dinesafe/housing) for data prep, training, simulation, and routing. Only VLM camera analysis and 24/7 Hermes monitoring require the Spark.
+For the traffic project, run `python3 traffic/pipeline.py build` for data prep + training, then `python3 traffic/pipeline.py dashboard`. Only VLM camera analysis (`pipeline.py vlm --live`) and 24/7 Hermes monitoring require the Spark; everything else runs on the MacBook in seconds.
 
 See each project's README for detailed usage instructions.
 
