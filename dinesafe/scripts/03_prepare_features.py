@@ -353,8 +353,10 @@ id_cols = ["est_id", "inspection_id", "inspection_date", "est_name",
            "address", "latitude", "longitude", "est_type_clean"]
 target_cols = ["target", "target_binary", "status"]
 
-train_out = train[id_cols + feature_cols + target_cols]
-test_out = test[id_cols + feature_cols + target_cols]
+train_out = train[id_cols + feature_cols + target_cols].copy()
+test_out = test[id_cols + feature_cols + target_cols].copy()
+train_out["inspection_id"] = train_out["inspection_id"].astype(str)
+test_out["inspection_id"] = test_out["inspection_id"].astype(str)
 
 train_out.to_parquet(OUT_DIR / "train.parquet", index=False)
 test_out.to_parquet(OUT_DIR / "test.parquet", index=False)
