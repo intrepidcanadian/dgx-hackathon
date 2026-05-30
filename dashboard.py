@@ -752,7 +752,8 @@ if refresh_rate > 0:
 # ============================================================
 # MAIN TABS
 # ============================================================
-tab_overview, tab_traffic, tab_nowcast, tab_simulate, tab_commute, tab_dinesafe, tab_housing, tab_analytics = st.tabs([
+(tab_overview, tab_traffic, tab_nowcast, tab_simulate, tab_commute,
+ tab_dinesafe, tab_housing, tab_analytics, tab_arch) = st.tabs([
     "🛰️ Command Center",
     "🚗 Traffic",
     "🔮 Nowcast",
@@ -761,6 +762,7 @@ tab_overview, tab_traffic, tab_nowcast, tab_simulate, tab_commute, tab_dinesafe,
     "🍽️ DineSafe",
     "🏠 Housing",
     "📊 Analytics",
+    "📐 Architecture",
 ])
 
 
@@ -1813,6 +1815,47 @@ with tab_nowcast:
                 "after a VLM camera sweep."
             )
 
+        # --- Spatio-temporal GNN multi-horizon forecast ---
+        gnn_fc = None
+        gnn_fc_file = TRAFFIC_STATE / "latest_forecast.json"
+        if gnn_fc_file.exists():
+            try:
+                with open(gnn_fc_file) as f:
+                    gnn_fc = json.load(f)
+            except Exception:
+                gnn_fc = None
+
+        st.divider()
+        st.subheader("🕸️ Network Forecast — Spatio-Temporal GNN")
+        if gnn_fc and gnn_fc.get("horizons"):
+            gc1, gc2, gc3, gc4 = st.columns(4)
+            gc1.metric("Model", gnn_fc.get("model", "STGNN"))
+            gc2.metric("Compute", gnn_fc.get("device", "?").upper())
+            gc3.metric("Network Nodes", gnn_fc.get("n_nodes", "?"))
+            tr = gnn_fc.get("trend", "STABLE")
+            tr_emoji = {"IMPROVING": "📉", "WORSENING": "📈", "STABLE": "➡️"}
+            gc4.metric("Trend", f"{tr_emoji.get(tr, '')} {tr}")
+
+            hz = gnn_fc["horizons"]
+            fc_df = pd.DataFrame({
+                "Horizon": [f"+{h['offset_min']}m" if h["offset_min"] else "Now"
+                            for h in hz],
+                "Congestion": [h["avg"] for h in hz],
+            }).set_index("Horizon")
+            st.area_chart(fc_df, color="#ffa726", height=220)
+            st.caption(
+                "Network-wide mean congestion (0–3) forecast across the road "
+                "graph. Unlike per-intersection scoring, the GNN propagates "
+                "congestion between connected intersections. Run: "
+                "`python3 traffic/scripts/16_gnn_forecast.py --forecast`"
+            )
+        else:
+            st.info(
+                "No GNN forecast yet. Train and forecast on the Spark GPU: "
+                "`python3 traffic/scripts/16_gnn_forecast.py --train` "
+                "(or `--demo` for a synthetic preview)."
+            )
+
         st.divider()
 
         # --- VLM Model Comparison ---
@@ -2113,3 +2156,132 @@ with tab_analytics:
             st.dataframe(pd.DataFrame(fresh_rows), hide_index=True, width=600)
         else:
             st.caption("No live data sources active yet.")
+
+
+# ============================================================
+# TAB 9: ARCHITECTURE  (appendix — how we model the data + GPU usage)
+# ============================================================
+with tab_arch:
+    st.markdown(
+        '<div class="cc-header"><div class="cc-title">System '
+        '<span>Architecture</span></div>'
+        '<div class="cc-status"><span class="cc-dot"></span>'
+        'Modeling &amp; GPU allocation</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<div class="cc-panel"><div class="cc-panel-title">Design principle</div>'
+        '<div style="color:#cfe9d8;font-size:.9rem;line-height:1.5;margin-top:6px">'
+        'The core prediction tasks are <b>tabular</b> — tens of engineered '
+        'features over hundreds of thousands of rows. On data of this shape, '
+        'gradient-boosted trees are at/near state-of-the-art, so '
+        '<b style="color:#00e676">XGBoost is the backbone of all three '
+        'projects</b>. We don\'t swap in deep nets to chase accuracy (the '
+        'traffic binary classifier is already 0.9937 AUC). The GPU is reserved '
+        'for workloads trees <i>structurally cannot do</i>.</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="cc-panel-title" style="margin-top:10px">'
+                '🖥️ Where the DGX Spark GPU is used</div>',
+                unsafe_allow_html=True)
+    gpu_tbl = pd.DataFrame([
+        {"Workload": "Live camera understanding",
+         "Model": "gemma3:4b VLM (Ollama)",
+         "Why GPU / why not XGBoost": "Vision-language over 336 frames; no tabular equivalent"},
+        {"Workload": "Congestion propagation forecast",
+         "Model": "Spatio-temporal GNN (PyTorch)",
+         "Why GPU / why not XGBoost": "Trees score intersections independently; can't model the road graph"},
+        {"Workload": "Sequence forecast + uncertainty",
+         "Model": "LSTM, Temporal Fusion Transformer",
+         "Why GPU / why not XGBoost": "Multi-horizon shelter occupancy with quantile bands"},
+        {"Workload": "NLP feature extraction",
+         "Model": "nemotron (Ollama)",
+         "Why GPU / why not XGBoost": "Free-text notes/complaints → structured features"},
+        {"Workload": "Knowledge graph construction",
+         "Model": "txt2kg + local LLM",
+         "Why GPU / why not XGBoost": "Triple extraction from neighbourhood docs"},
+        {"Workload": "Accelerated tabular training",
+         "Model": "XGBoost device=cuda, RAPIDS",
+         "Why GPU / why not XGBoost": "Same model, ~5× faster prep + training"},
+    ])
+    st.dataframe(gpu_tbl, hide_index=True, use_container_width=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(
+            '<div class="cc-panel"><div class="cc-panel-title">'
+            '🚗 Traffic — data modeling</div>'
+            '<div style="color:#cfe9d8;font-size:.86rem;line-height:1.5;margin-top:6px">'
+            '<b>Target:</b> per-intersection congestion level 0–3 from '
+            'per-location quartile binning of 15-min volume (comparable across '
+            'very different intersections).<br><br>'
+            '<b>Features (30):</b> temporal (hour, DOW, cyclical sin/cos, '
+            'rush flags), volume/modal-split, and location history '
+            '(per-intersection mean/std/max, hour×loc & DOW×loc interactions).'
+            '<br><br><b>Models:</b> XGBoost binary (0.9937 AUC), 4-class (87%), '
+            'volume regression (MAE 4.6); VLM-enhanced XGBoost nowcast; and the '
+            'spatio-temporal GNN →</div></div>',
+            unsafe_allow_html=True,
+        )
+    with c2:
+        st.markdown(
+            '<div class="cc-panel"><div class="cc-panel-title">'
+            '🕸️ Spatio-temporal GNN (script 16)</div>'
+            '<div style="color:#cfe9d8;font-size:.86rem;line-height:1.5;margin-top:6px">'
+            'The one place a neural net adds what XGBoost cannot: modeling how '
+            'congestion <b>spreads across the network</b> over time, producing '
+            'the <b>multi-horizon</b> forecast on the Nowcast tab.</div>'
+            '<div style="font-family:monospace;font-size:.72rem;color:#7d8da3;'
+            'background:#0e1622;border:1px solid #1e2a3a;border-radius:8px;'
+            'padding:10px;margin-top:8px;line-height:1.5">'
+            'node embeddings → adaptive adjacency<br>'
+            'A = softmax(relu(E1 · E2ᵀ))<br>'
+            'GRU temporal encoder (per node)<br>'
+            '2× diffusion graph conv  H′ = A · H<br>'
+            'linear decoder → next T_out steps</div>'
+            '<div style="color:#cfe9d8;font-size:.84rem;line-height:1.5;margin-top:8px">'
+            'Adjacency is <b>learned</b> (no lat/lon needed). Trained with '
+            '<b>sensor dropout</b> so masked nodes are recovered from '
+            'neighbours. ~26K params, trains in seconds on <code>cuda</code>.'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        '<div class="cc-panel" style="margin-top:10px">'
+        '<div class="cc-panel-title">🍽️ DineSafe &amp; 🏠 Housing</div>'
+        '<div style="color:#cfe9d8;font-size:.86rem;line-height:1.5;margin-top:6px">'
+        '<b>DineSafe:</b> XGBoost (0.82 AUC) over inspection history + 311 '
+        'complaints + fire incidents, with <b>nemotron</b> NLP features and a '
+        '<b>txt2kg</b> neighbourhood knowledge graph.<br>'
+        '<b>Housing:</b> three architectures on shelter occupancy + weather + '
+        'bike-share + RentSafeTO — <b>XGBoost</b> (0.93 AUC) for the point '
+        'forecast, <b>LSTM</b> and <b>TFT</b> for sequence/uncertainty '
+        '(GPU-trained).</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="cc-panel-title" style="margin-top:10px">'
+                '🔌 Serving architecture — how models reach this dashboard</div>',
+                unsafe_allow_html=True)
+    st.code(
+        "VLM orchestrator (15) ┐\n"
+        "VLM feedback loop (14) ┼─► data/monitor_state/*.json ─► dashboard.py (Streamlit)\n"
+        "GNN forecaster   (16) ┘     latest_nowcast.json          ├─ Command Center (pydeck)\n"
+        "Hermes monitor (07/09)      latest_forecast.json         ├─ Nowcast + Network Forecast\n"
+        "                            orchestrator_status.json     └─ Event Sim + Commute Planner",
+        language="text",
+    )
+    st.markdown(
+        '<div style="color:#cfe9d8;font-size:.86rem;line-height:1.5">'
+        'Models never talk to the UI directly — GPU jobs write small '
+        '<b>state files</b> that Streamlit polls (15–30s auto-refresh). This '
+        'decouples slow GPU inference from the always-fast UI: the '
+        '<b>GPU side (Spark)</b> runs VLM sweeps, GNN training/forecasting, '
+        'XGBoost <code>device=cuda</code>, and 24/7 Hermes monitoring; the '
+        '<b>UI side</b> reads state files only, has no GPU dependency, and '
+        'degrades gracefully when a feed is idle.</div>',
+        unsafe_allow_html=True,
+    )

@@ -47,7 +47,8 @@ traffic/
 │   ├── 12_commute_optimizer.py           # Daily commute optimization
 │   ├── 13_enrich_events.py              # Real event data enrichment
 │   ├── 14_vlm_feedback_loop.py          # VLM→model feedback + nowcasting
-│   └── 15_vlm_orchestrator.py           # Continuous VLM sweep + nowcast loop
+│   ├── 15_vlm_orchestrator.py           # Continuous VLM sweep + nowcast loop
+│   └── 16_gnn_forecast.py               # Spatio-temporal GNN multi-horizon forecast
 ├── data/
 │   ├── raw/                # Traffic cameras, turning movement counts
 │   ├── processed/          # Train/test parquet, feature columns
@@ -178,7 +179,24 @@ Open the unified dashboard alongside to see live updates:
 streamlit run dashboard.py  # Set auto-refresh to 15s or 30s
 ```
 
-### 8. Hermes Agent integration
+### 8. Spatio-temporal GNN forecaster
+
+A graph neural network that models how congestion **propagates across the road network** — the one capability XGBoost structurally lacks — and emits a multi-horizon forecast that feeds the dashboard's Nowcast tab. Pure PyTorch (no `torch_geometric` dependency), trains in seconds on `device="cuda"`.
+
+```bash
+# Train on the Spark GPU and emit an initial forecast
+python3 scripts/16_gnn_forecast.py --train --epochs 80
+
+# Produce a multi-horizon forecast from the current network state
+python3 scripts/16_gnn_forecast.py --forecast
+
+# Demo forecast — synthetic, no torch/data, for presentations
+python3 scripts/16_gnn_forecast.py --demo
+```
+
+Architecture: self-adaptive adjacency `A = softmax(relu(E1·E2ᵀ))` (graph is learned, no lat/lon needed) → GRU temporal encoder → 2× diffusion graph convolution → linear decoder. Trained with sensor dropout so masked intersections are recovered from their neighbours. See the **Architecture** tab in the dashboard and the Appendix in the top-level README for the full write-up.
+
+### 9. Hermes Agent integration
 
 Ask Hermes to schedule automatic monitoring:
 
