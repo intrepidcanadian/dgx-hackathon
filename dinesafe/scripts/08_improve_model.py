@@ -105,6 +105,8 @@ print(f"\n{'='*60}")
 print("2. FIXING 311 DATA (POSTAL CODE JOIN)")
 print(f"{'='*60}")
 
+fsa_geo = None
+
 # Build FSA→geographic centroid lookup from DineSafe establishments
 # DineSafe current data has address but not postal codes directly
 # Use lat/lon to create FSA-like zones via grid binning
@@ -721,6 +723,230 @@ if fire_path.exists():
         print(f"  {len(fi_grid)} grid cells")
 
 # ============================================================
+# 7B. NEW ENRICHMENT SOURCES
+# ============================================================
+print(f"\n{'='*60}")
+print("7B. NEW ENRICHMENT SOURCES")
+print(f"{'='*60}")
+
+# --- Residential Health Hazards (TPH pest/mould investigations) ---
+print("--- Residential Health Hazards ---")
+try:
+    hh = pd.DataFrame(fetch_ckan("76c53509-3278-4869-9080-7536a8f4a18b", max_records=50000))
+    print(f"  Records: {len(hh)}")
+    print(f"  Columns: {list(hh.columns)}")
+
+    hh_lat = hh_lon = None
+    for col in hh.columns:
+        cl = col.lower()
+        if "lat" in cl and hh_lat is None:
+            hh_lat = col
+        if "lon" in cl and hh_lon is None:
+            hh_lon = col
+
+    if hh_lat and hh_lon:
+        hh["lat"] = pd.to_numeric(hh[hh_lat], errors="coerce")
+        hh["lon"] = pd.to_numeric(hh[hh_lon], errors="coerce")
+    else:
+        for col in hh.columns:
+            if "geometry" in col.lower() or "geo" == col.lower():
+                lats, lons = [], []
+                for v in hh[col]:
+                    la, lo = parse_geometry(str(v))
+                    lats.append(la)
+                    lons.append(lo)
+                hh["lat"] = lats
+                hh["lon"] = lons
+                break
+
+    if "lat" in hh.columns:
+        hh = hh.dropna(subset=["lat", "lon"])
+        hh = hh[(hh["lat"] > 43.0) & (hh["lat"] < 44.5)]
+        hh["lat_bin"] = (hh["lat"] * 100).round() / 100
+        hh["lon_bin"] = (hh["lon"] * 100).round() / 100
+
+        hh_agg = {"health_hazard_count": ("lat", "count")}
+        for col in hh.columns:
+            cl = col.lower()
+            if "pest" in cl or "rodent" in cl or "cockroach" in cl or "bed_bug" in cl:
+                hh_agg["health_hazard_pest"] = (col, "count")
+            if "hazard_type" in cl or "investigation_type" in cl:
+                hh["is_pest_hazard"] = hh[col].astype(str).str.lower().str.contains(
+                    "pest|rodent|cockroach|bed bug|mice|rat", na=False
+                ).astype(int)
+                hh_agg["health_hazard_pest"] = ("is_pest_hazard", "sum")
+
+        hh_grid = hh.groupby(["lat_bin", "lon_bin"]).agg(**hh_agg).reset_index()
+
+        for col in hh_grid.columns:
+            if col in ["lat_bin", "lon_bin"]:
+                continue
+            if col in train.columns:
+                train = train.drop(columns=[col])
+            if col in test.columns:
+                test = test.drop(columns=[col])
+
+        train = train.merge(hh_grid, on=["lat_bin", "lon_bin"], how="left")
+        test = test.merge(hh_grid, on=["lat_bin", "lon_bin"], how="left")
+        for col in hh_grid.columns:
+            if col not in ["lat_bin", "lon_bin"]:
+                train[col] = train[col].fillna(0)
+                test[col] = test[col].fillna(0)
+        cov = (train["health_hazard_count"] > 0).mean()
+        print(f"  {len(hh_grid)} grid cells, coverage={cov:.1%}")
+    else:
+        print("  No lat/lon found")
+except Exception as e:
+    print(f"  Error: {e}")
+
+# --- Apartment Building Evaluations (detailed scores) ---
+print("--- Apartment Building Evaluations ---")
+try:
+    abe = pd.DataFrame(fetch_ckan("244f7a02-da5c-425b-b55f-fbdd133dd732", max_records=50000))
+    print(f"  Records: {len(abe)}")
+
+    abe["lat"] = pd.to_numeric(abe.get("LATITUDE", pd.Series()), errors="coerce")
+    abe["lon"] = pd.to_numeric(abe.get("LONGITUDE", pd.Series()), errors="coerce")
+    abe = abe.dropna(subset=["lat", "lon"])
+    abe["lat_bin"] = (abe["lat"] * 100).round() / 100
+    abe["lon_bin"] = (abe["lon"] * 100).round() / 100
+
+    abe_agg = {"apt_eval_count": ("lat", "count")}
+    for col in abe.columns:
+        cl = col.upper()
+        if "PEST" in cl:
+            abe[col] = pd.to_numeric(abe[col], errors="coerce")
+            abe_agg["apt_pest_score"] = (col, "mean")
+        if "GARBAGE" in cl and "apt_garbage_score" not in abe_agg:
+            abe[col] = pd.to_numeric(abe[col], errors="coerce")
+            abe_agg["apt_garbage_score"] = (col, "mean")
+        if "CLEAN" in cl and "apt_clean_score" not in abe_agg:
+            abe[col] = pd.to_numeric(abe[col], errors="coerce")
+            abe_agg["apt_clean_score"] = (col, "mean")
+        if "EXTERIOR" in cl and "GRAFFITI" not in cl and "apt_exterior_score" not in abe_agg:
+            abe[col] = pd.to_numeric(abe[col], errors="coerce")
+            abe_agg["apt_exterior_score"] = (col, "mean")
+
+    abe_grid = abe.groupby(["lat_bin", "lon_bin"]).agg(**abe_agg).reset_index()
+
+    for col in abe_grid.columns:
+        if col in ["lat_bin", "lon_bin"]:
+            continue
+        if col in train.columns:
+            train = train.drop(columns=[col])
+        if col in test.columns:
+            test = test.drop(columns=[col])
+
+    train = train.merge(abe_grid, on=["lat_bin", "lon_bin"], how="left")
+    test = test.merge(abe_grid, on=["lat_bin", "lon_bin"], how="left")
+    for col in abe_grid.columns:
+        if col not in ["lat_bin", "lon_bin"]:
+            train[col] = train[col].fillna(0)
+            test[col] = test[col].fillna(0)
+    cov = (train["apt_eval_count"] > 0).mean()
+    print(f"  {len(abe_grid)} grid cells, {len(abe_agg)} features, coverage={cov:.1%}")
+    print(f"  Features: {[k for k in abe_agg.keys()]}")
+except Exception as e:
+    print(f"  Error: {e}")
+
+# --- Business Licences (licence age, turnover) ---
+print("--- Business Licences ---")
+try:
+    biz = pd.DataFrame(fetch_ckan("169e90ba-3ae0-43dd-8b2f-919e87002f50", max_records=50000))
+    print(f"  Records: {len(biz)}")
+    print(f"  Columns: {list(biz.columns)[:15]}")
+
+    biz_cat_col = None
+    for col in biz.columns:
+        cl = col.lower()
+        if "category" in cl or "licence_type" in cl or "type" in cl:
+            biz_cat_col = col
+            break
+
+    if biz_cat_col:
+        cats = biz[biz_cat_col].value_counts().head(10)
+        print(f"  Top categories: {dict(cats)}")
+        food_keywords = ["eat|food|restaurant|refreshment|tavern|bakery|butcher|caterer|grocery|café|cafe"
+                        "|dining|dine|kitchen|pizza|sushi|grill|bar |pub |lounge"]
+        biz["is_food"] = biz[biz_cat_col].astype(str).str.lower().str.contains(
+            "|".join(food_keywords), na=False
+        ).astype(int)
+        print(f"  Food-related licences: {biz['is_food'].sum()}")
+
+    addr_col = None
+    for col in biz.columns:
+        cl = col.lower()
+        if "address" in cl and "line" in cl:
+            addr_col = col
+            break
+        if "address" in cl and addr_col is None:
+            addr_col = col
+
+    issue_col = cancel_col = None
+    for col in biz.columns:
+        cl = col.lower()
+        if "issue" in cl and "date" in cl:
+            issue_col = col
+        if "cancel" in cl and "date" in cl:
+            cancel_col = col
+
+    if addr_col:
+        biz["postal_fsa"] = biz[addr_col].astype(str).str.extract(
+            r'([A-Za-z]\d[A-Za-z])\s*\d[A-Za-z]\d', expand=False
+        )
+        if biz["postal_fsa"].isna().all():
+            for col in biz.columns:
+                if "postal" in col.lower():
+                    biz["postal_fsa"] = biz[col].astype(str).str[:3].str.upper()
+                    break
+
+    if "postal_fsa" in biz.columns and fsa_geo is not None:
+        biz_fsa = biz.groupby("postal_fsa").agg(
+            biz_licence_count=("postal_fsa", "count"),
+            biz_food_count=("is_food", "sum") if "is_food" in biz.columns else ("postal_fsa", "count"),
+        ).reset_index()
+
+        if issue_col:
+            biz[issue_col] = pd.to_datetime(biz[issue_col], errors="coerce")
+            recent = biz[biz[issue_col] >= "2023-01-01"]
+            recent_fsa = recent.groupby("postal_fsa").agg(
+                biz_new_licences=("postal_fsa", "count"),
+            ).reset_index()
+            biz_fsa = biz_fsa.merge(recent_fsa, on="postal_fsa", how="left")
+            biz_fsa["biz_new_licences"] = biz_fsa["biz_new_licences"].fillna(0)
+
+        fsa_geo_biz = fsa_geo.rename(columns={"fsa": "postal_fsa"})
+        biz_fsa = biz_fsa.merge(fsa_geo_biz, on="postal_fsa", how="inner")
+
+        for col in biz_fsa.columns:
+            if col in ["postal_fsa", "lat_bin", "lon_bin"]:
+                continue
+            if col in train.columns:
+                train = train.drop(columns=[col])
+            if col in test.columns:
+                test = test.drop(columns=[col])
+
+        train = train.merge(
+            biz_fsa.drop(columns=["postal_fsa"]),
+            on=["lat_bin", "lon_bin"], how="left"
+        )
+        test = test.merge(
+            biz_fsa.drop(columns=["postal_fsa"]),
+            on=["lat_bin", "lon_bin"], how="left"
+        )
+        for col in biz_fsa.columns:
+            if col not in ["postal_fsa", "lat_bin", "lon_bin"]:
+                train[col] = train[col].fillna(0)
+                test[col] = test[col].fillna(0)
+        cov = (train.get("biz_licence_count", pd.Series(0)) > 0).mean()
+        print(f"  FSA coverage: {cov:.1%}")
+        print(f"  Features: {[c for c in biz_fsa.columns if c not in ['postal_fsa', 'lat_bin', 'lon_bin']]}")
+    else:
+        print("  No postal/address data for spatial join")
+except Exception as e:
+    print(f"  Error: {e}")
+
+# ============================================================
 # 8. FINAL FEATURE SET + TRAIN
 # ============================================================
 print(f"\n{'='*60}")
@@ -744,7 +970,11 @@ enrichment_candidates = (
     ["fire_violations"] +
     ["traffic_vehicle", "traffic_pedestrian", "traffic_points"] +
     ["rentsafe_count", "rentsafe_pest", "rentsafe_clean", "rentsafe_score"] +
-    ["fire_incidents"]
+    ["fire_incidents"] +
+    ["health_hazard_count", "health_hazard_pest"] +
+    ["apt_eval_count", "apt_pest_score", "apt_garbage_score",
+     "apt_clean_score", "apt_exterior_score"] +
+    ["biz_licence_count", "biz_food_count", "biz_new_licences"]
 )
 
 enrichment = [f for f in enrichment_candidates if f in train.columns]
