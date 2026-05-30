@@ -40,7 +40,7 @@ hist_dir = DATA_DIR / "dinesafe_hist" / "2023-04-11 - Dinesafe Historical data"
 if hist_dir.exists():
     hist_dfs = []
     for f in sorted(hist_dir.glob("*.csv")):
-        df = pd.read_csv(f, encoding="latin-1")
+        df = pd.read_csv(f, encoding="latin-1", on_bad_lines="skip")
         hist_dfs.append(df)
     hist = pd.concat(hist_dfs, ignore_index=True)
     hist["Inspection Date"] = pd.to_datetime(hist["Inspection Date"], errors="coerce")
