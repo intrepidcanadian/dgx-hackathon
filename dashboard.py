@@ -947,7 +947,7 @@ with tab_overview:
                 incident_df=inc_pts if len(inc_pts) else None,
                 height=520,
             )
-            st.pydeck_chart(deck, use_container_width=True)
+            st.pydeck_chart(deck, width='stretch')
         except Exception as e:
             st.warning(f"Map unavailable: {e}")
             if cam_map_df is not None:
@@ -1179,7 +1179,7 @@ with tab_simulate:
             dow_val = dow_map[sim_dow]
 
             run_sim = st.button("▶  Run Simulation", type="primary",
-                                use_container_width=True)
+                                width='stretch')
 
         if run_sim:
             time_slice = traffic["test"][
@@ -1279,7 +1279,7 @@ with tab_simulate:
                         center={"lat": sim["lat"], "lon": sim["lon"]},
                         zoom=12, height=440,
                     )
-                    st.pydeck_chart(deck, use_container_width=True)
+                    st.pydeck_chart(deck, width='stretch')
                 except Exception as e:
                     st.warning(f"Map unavailable: {e}")
 
@@ -1292,7 +1292,7 @@ with tab_simulate:
             with st.expander("Affected intersections (detail)"):
                 aff_df = pd.DataFrame(sim["affected"]).sort_values("distance_km")
                 st.dataframe(aff_df[["location", "distance_km", "impact"]].head(25),
-                             hide_index=True, use_container_width=True)
+                             hide_index=True, width='stretch')
 
         st.markdown('<div class="cc-panel-title" style="margin-top:10px">'
                     f'📍 Real Events Today ({len(events)})</div>', unsafe_allow_html=True)
@@ -1389,7 +1389,7 @@ with tab_commute:
                 unsafe_allow_html=True,
             )
             run_commute = st.button("▶ Find Optimal Departure",
-                                    type="primary", use_container_width=True)
+                                    type="primary", width='stretch')
 
         with viz:
             # Build congestion backdrop for the route map
@@ -1410,7 +1410,7 @@ with tab_commute:
                     from_loc, to_loc, from_name, to_name,
                     camera_df=route_cam_df, events=events, height=420,
                 )
-                st.pydeck_chart(rdeck, use_container_width=True)
+                st.pydeck_chart(rdeck, width='stretch')
             except Exception as e:
                 st.warning(f"Map unavailable: {e}")
                 st.map(pd.DataFrame({
@@ -1737,14 +1737,10 @@ with tab_nowcast:
                     map_df = vlm.dropna(subset=["lat", "lon"]).copy()
                     if len(map_df) > 0:
                         map_df["size"] = map_df["congestion_level"].clip(0, 3) * 15 + 10
-                        map_df["color_r"] = map_df["congestion_level"].map(
-                            {0: 0, 1: 200, 2: 255, 3: 255})
-                        map_df["color_g"] = map_df["congestion_level"].map(
-                            {0: 180, 1: 200, 2: 140, 3: 50})
-                        map_df["color_b"] = map_df["congestion_level"].map(
-                            {0: 0, 1: 0, 2: 0, 3: 50})
+                        map_df["color"] = map_df["congestion_level"].clip(0, 3).map(
+                            {0: "#00b400", 1: "#c8c800", 2: "#ff8c00", 3: "#ff3232"})
                         st.map(map_df, latitude="lat", longitude="lon",
-                               size="size", color=["color_r", "color_g", "color_b"])
+                               size="size", color="color")
             else:
                 st.info("VLM data loaded but missing congestion_level column.")
         else:
@@ -2206,7 +2202,7 @@ with tab_arch:
          "Model": "XGBoost device=cuda, RAPIDS",
          "Why GPU / why not XGBoost": "Same model, ~5× faster prep + training"},
     ])
-    st.dataframe(gpu_tbl, hide_index=True, use_container_width=True)
+    st.dataframe(gpu_tbl, hide_index=True, width='stretch')
 
     c1, c2 = st.columns(2)
     with c1:
