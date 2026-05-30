@@ -43,6 +43,10 @@ HOUSING_MODELS = ROOT / "housing" / "models"
 
 CKAN_API = "https://ckan0.cf.opendata.inter.prod-toronto.ca/api/3/action/datastore_search"
 
+# Ollama / nemotron for natural-language tab summaries
+OLLAMA_URL = "http://localhost:11434"
+NEMOTRON_MODEL = "nemotron"
+
 # ============================================================
 # PAGE CONFIG
 # ============================================================
@@ -666,6 +670,72 @@ def hw_bar(label, value, pct, warn=False):
 # ============================================================
 # SIDEBAR
 # ============================================================
+@st.cache_data(ttl=1800, show_spinner=False)
+def _nemotron_generate(prompt: str) -> dict:
+    """Call nemotron via Ollama. Cached by prompt text so identical context
+    returns instantly. Returns {"ok": bool, "text"/"error": str}."""
+    try:
+        r = requests.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model": NEMOTRON_MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.3, "num_predict": 220},
+            },
+            timeout=120,
+        )
+        r.raise_for_status()
+        text = r.json().get("response", "").strip()
+        return {"ok": bool(text), "text": text}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def render_ai_summary(tab_key: str, context: str, instruction: str = ""):
+    """On-demand nemotron summary panel for a tab.
+
+    Generates on button click (nemotron is slow), persists the result in
+    session state across reruns/auto-refresh, and degrades gracefully when
+    Ollama/nemotron is unreachable (e.g. running locally without GPU)."""
+    state_key = f"ai_summary_{tab_key}"
+    st.markdown(
+        '<div class="cc-panel-title" style="margin-top:6px">'
+        '🧠 AI Summary · <span style="color:#00e676">nemotron</span> (local)</div>',
+        unsafe_allow_html=True,
+    )
+    c1, c2 = st.columns([1, 5])
+    clicked = c1.button("Generate", key=f"gen_{tab_key}")
+    if c2.button("Clear", key=f"clr_{tab_key}") and state_key in st.session_state:
+        del st.session_state[state_key]
+    if clicked:
+        base = instruction or (
+            "You are an urban-operations analyst writing for a city command "
+            "centre. In 3-4 plain-language sentences, summarize the data below: "
+            "what stands out, the key numbers, and one actionable takeaway. "
+            "No preamble, no bullet points."
+        )
+        prompt = f"{base}\n\nDATA:\n{context}\n\nSUMMARY:"
+        with st.spinner("nemotron is writing the summary…"):
+            res = _nemotron_generate(prompt)
+        if res.get("ok"):
+            st.session_state[state_key] = res["text"]
+        else:
+            st.session_state[state_key] = None
+            st.warning(
+                "Couldn't reach nemotron on Ollama "
+                f"({res.get('error', 'no response')}). On the box running the "
+                "dashboard: `ollama serve` then `ollama pull nemotron`."
+            )
+    if st.session_state.get(state_key):
+        st.markdown(
+            '<div class="cc-panel" style="border-left:3px solid #00e676">'
+            f'<div style="color:#e6edf3;font-size:.9rem;line-height:1.55">'
+            f'{st.session_state[state_key]}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+
 @st.cache_data(ttl=15)
 def load_orchestrator_status():
     """Load VLM orchestrator status (refreshes every 15s)."""
@@ -688,15 +758,14 @@ with st.sidebar:
 
     # Project status indicators
     traffic = load_traffic()
-    dinesafe = load_dinesafe()
-    # Housing/homelessness project retired from the dashboard. Stubbed as
-    # unavailable so every downstream `housing["available"]` guard hides it
-    # without a data load or "not available" error.
+    # DineSafe and Housing/homelessness projects retired from the dashboard.
+    # Stubbed as unavailable so every downstream `["available"]` guard hides
+    # them without a data load or "not available" error.
+    dinesafe = {"available": False}
     housing = {"available": False}
 
     st.subheader("Data Sources")
     st.markdown(f"{'🟢' if traffic['available'] else '🔴'} Traffic ({346_154:,} records)")
-    st.markdown(f"{'🟢' if dinesafe['available'] else '🔴'} DineSafe")
 
     if traffic["available"]:
         vlm_status = "🟢 Live" if traffic.get("vlm") is not None else "⚪ No data"
@@ -770,14 +839,13 @@ if refresh_rate > 0:
 # MAIN TABS
 # ============================================================
 (tab_overview, tab_traffic, tab_cameras, tab_nowcast, tab_simulate, tab_commute,
- tab_dinesafe, tab_analytics, tab_arch) = st.tabs([
+ tab_analytics, tab_arch) = st.tabs([
     "🛰️ Command Center",
     "🚗 Traffic",
     "📷 Live Cameras",
     "🔮 Nowcast",
     "🎪 Event Simulation",
     "🧭 Commute Planner",
-    "🍽️ DineSafe",
     "📊 Analytics",
     "📐 Architecture",
 ])
@@ -823,13 +891,6 @@ with tab_overview:
       {status_html}
     </div>
     """, unsafe_allow_html=True)
-
-    # ---- Scenario selector ----
-    scenario = st.radio(
-        "Active scenario",
-        ["🟢 Live Operations", "🏀 Raptors Surge", "🚇 TTC Delay", "🌧️ Storm Response"],
-        horizontal=True, label_visibility="collapsed",
-    )
 
     # ---- KPI row ----
     k1, k2, k3, k4, k5 = st.columns(5)
@@ -995,7 +1056,7 @@ with tab_overview:
         models = [("gemma3:4b", "VLM camera analysis", traffic.get("vlm") is not None),
                   ("XGBoost congestion", "0.99 AUC", traffic["available"]),
                   ("XGBoost + VLM nowcast", "next-hour", traffic.get("vlm_meta") is not None),
-                  ("nemotron", "DineSafe NLP", dinesafe["available"])]
+                  ("nemotron", "AI tab summaries", True)]
         rows = ""
         for name, desc, loaded in models:
             dot = "#00e676" if loaded else "#3a4453"
@@ -1033,7 +1094,6 @@ with tab_overview:
         ("Toronto Open Data", f"{len(events)} events today", True),
         ("Traffic Cameras", f"{len(traffic['cams']) if traffic['available'] else 0} live feeds", traffic["available"]),
         ("Road Restrictions", f"{len(restrictions)} active", True),
-        ("DineSafe", "risk model" if dinesafe["available"] else "—", dinesafe["available"]),
     ]
     chip_html = "".join(
         f'<span class="cc-chip"><b>{name}</b> · {val} '
@@ -1149,6 +1209,24 @@ with tab_traffic:
     except Exception:
         pass
 
+    # ---- AI summary ----
+    st.divider()
+    _meta = traffic.get("meta") or {}
+    _peak_hour = int(hourly.loc[hourly["Avg Congestion"].idxmax(), "Hour"]) if len(hourly) else "?"
+    _peak_day = daily.loc[daily["congestion_level"].idxmax(), "Day"] if len(daily) else "?"
+    _top_feats = ", ".join(imp_df["Feature"].head(5)) if "imp_df" in dir() else "n/a"
+    _live_note = ""
+    if traffic.get("hermes"):
+        _live_note = "; live VLM levels: " + ", ".join(f"{k}={v}" for k, v in levels.items())
+    traffic_ctx = (
+        f"Toronto traffic congestion model. Binary congestion AUC={_meta.get('binary_auc', 0):.4f}, "
+        f"4-class accuracy={_meta.get('multi_accuracy', _meta.get('accuracy', 0)):.2f}, "
+        f"volume regression MAE={_meta.get('volume_mae', 'n/a')}. "
+        f"Busiest hour of day = {_peak_hour}:00, busiest day = {_peak_day}. "
+        f"Top congestion drivers: {_top_feats}{_live_note}."
+    )
+    render_ai_summary("traffic", traffic_ctx)
+
 
 # ============================================================
 # TAB: LIVE CAMERAS — actual camera images + VLM overlay
@@ -1251,6 +1329,21 @@ with tab_cameras:
                                 st.caption(f"{LEVEL_LABELS.get(lvl, lvl)}{suffix}")
                             else:
                                 st.caption("⚪ Not yet analyzed")
+
+            # ---- AI summary ----
+            st.divider()
+            _lvl_counts = cams[cams["vlm_level"] >= 0]["vlm_level"].value_counts().to_dict()
+            _lvl_str = ", ".join(
+                f"{LEVEL_LABELS.get(int(k), k)}={int(v)}"
+                for k, v in sorted(_lvl_counts.items())
+            ) or "none analyzed yet"
+            cameras_ctx = (
+                f"Toronto live traffic-camera VLM analysis (gemma3 vision model on DGX Spark). "
+                f"{len(cams):,} total cameras, {n_analyzed:,} analyzed in the last sweep "
+                f"at {ts[:16].replace('T', ' ') if ts else 'n/a'}. "
+                f"Congestion level distribution across analyzed cameras: {_lvl_str}."
+            )
+            render_ai_summary("cameras", cameras_ctx)
 
 
 # ============================================================
@@ -1629,135 +1722,28 @@ with tab_commute:
             h3.metric("Route", opt.get("route", "?"))
             st.caption(f"Generated: {c.get('timestamp', 'N/A')}")
 
-
-# ============================================================
-# TAB 5: DINESAFE
-# ============================================================
-with tab_dinesafe:
-    if not dinesafe["available"]:
-        st.error(f"DineSafe data not available: {dinesafe.get('error', 'unknown')}")
-        st.caption(
-            "Expected files: dinesafe/data/processed/test_final.parquet, "
-            "model_final_metadata.json, models/xgb_risk_final.json. "
-            "Regenerate with: `bash deploy_spark.sh dinesafe`."
-        )
-    else:
-        st.header("Restaurant Inspection Risk Predictor")
-
-        ds_test = dinesafe["test"]
-        ds_meta = dinesafe["meta"]
-        ds_importance = dinesafe.get("importance", {})
-
-        # Risk score column (probability an inspection fails / finds violations)
-        risk_col = "pred_risk" if "pred_risk" in ds_test.columns else None
-
-        # Overview metrics
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Risk AUC-ROC", f"{ds_meta.get('risk_auc', 0):.4f}")
-        col2.metric("Avg Precision", f"{ds_meta.get('risk_ap', 0):.4f}")
-        col3.metric("Features", ds_meta.get("total_features", 0))
-        col4.metric("Test Inspections", f"{len(ds_test):,}")
-        st.caption(
-            f"{ds_meta.get('base_features', 0)} base inspection-history features + "
-            f"{len(ds_meta.get('enrichment_features', []))} enrichment factors "
-            "(pest/311/fire/rentsafe/traffic). "
-            f"Severity model MAE {ds_meta.get('severity_mae', 0):.2f}."
-        )
-
-        # --- What drives risk: feature importance over the real factors -------
-        st.subheader("What Drives Risk")
-        st.caption(
-            "Model gain by feature — higher means the factor moves the "
-            "fail-risk prediction more. These are the signals the user asked "
-            "about: pest-violation rates, 311 service requests, fire history."
-        )
-        # Friendly labels for the engineered factor columns
-        FACTOR_LABELS = {
-            "est_rate_pest": "Past pest violations (rate)",
-            "est_rate_sanitation": "Past sanitation violations",
-            "est_rate_temperature": "Past temperature violations",
-            "est_rate_structural": "Past structural violations",
-            "est_rate_training": "Past food-handler training issues",
-            "est_rate_equipment": "Past equipment violations",
-            "est_rate_storage": "Past storage violations",
-            "est_rate_waste": "Past waste-handling violations",
-            "cluster_fail_rate": "Neighbourhood fail rate (geo cluster)",
-            "cluster_n_est": "Establishments in cluster",
-            "cluster_avg_records": "Avg inspections in cluster",
-            "cluster_fail_std": "Cluster fail-rate variability",
-            "sr_fsa_total": "311 service requests (area)",
-            "sr_fsa_pest": "311 pest/rodent complaints (area)",
-            "sr_fsa_food": "311 food complaints (area)",
-            "sr_fsa_property": "311 property-standard complaints (area)",
-            "bodysafe_count": "BodySafe inspections nearby",
-            "bodysafe_fail_rate": "BodySafe fail rate nearby",
-            "fire_violations": "Fire-code violations (area)",
-            "fire_incidents": "Fire incidents (area)",
-            "traffic_vehicle": "Vehicle traffic nearby",
-            "traffic_pedestrian": "Pedestrian traffic nearby",
-            "traffic_points": "Traffic measurement points nearby",
-            "rentsafe_count": "RentSafe buildings nearby",
-            "rentsafe_pest": "RentSafe pest issues nearby",
-            "rentsafe_clean": "RentSafe cleanliness issues nearby",
-        }
-        if ds_importance:
-            imp_df = pd.DataFrame(
-                [(FACTOR_LABELS.get(k, k), v) for k, v in ds_importance.items()],
-                columns=["Factor", "Importance (gain)"],
-            ).sort_values("Importance (gain)", ascending=False).head(18)
-            st.bar_chart(
-                imp_df.set_index("Factor")["Importance (gain)"],
-                color="#ff6600", horizontal=True,
+        # ---- AI summary ----
+        st.divider()
+        _best_line = ""
+        if "best" in dir() and "saved" in dir():
+            _best_line = (
+                f" Best departure window: {best['Hour']} "
+                f"({best['Drive (min)']:.0f} min drive, congestion {best['Congestion']:.1f}/3), "
+                f"saving ~{saved:.0f} min vs the worst window."
             )
-        else:
-            st.info("Feature importances unavailable — model booster not loaded.")
+        commute_ctx = (
+            f"Toronto commute planner. Route: {from_name} → {to_name} on {plan_dow}, "
+            f"~{road_dist:.1f} km by road.{_best_line}"
+        )
+        render_ai_summary(
+            "commute", commute_ctx,
+            instruction=(
+                "You are a commute advisor. In 2-3 plain sentences tell the "
+                "commuter when to leave and why, based on the data below. "
+                "No preamble, no bullet points."
+            ),
+        )
 
-        if risk_col:
-            # Risk distribution
-            st.subheader("Risk Score Distribution")
-            hist_data = pd.DataFrame({"Fail Probability": ds_test[risk_col]})
-            st.bar_chart(
-                hist_data["Fail Probability"].value_counts(bins=30).sort_index(),
-                color="#ff6600",
-            )
-
-            # High risk establishments — show the contributing factor columns too
-            st.subheader("Highest Risk Establishments")
-            high_risk = ds_test.sort_values(risk_col, ascending=False).head(20)
-            display_cols = ["est_name", "address", "inspection_date", risk_col,
-                            "est_rate_pest", "sr_fsa_pest", "fire_incidents",
-                            "cluster_fail_rate"]
-            available_cols = [c for c in display_cols if c in high_risk.columns]
-            st.dataframe(
-                high_risk[available_cols].rename(columns={
-                    risk_col: "Fail Risk", "est_rate_pest": "Pest Hist",
-                    "sr_fsa_pest": "311 Pest", "fire_incidents": "Fire Inc",
-                    "cluster_fail_rate": "Area Fail Rate"}),
-                hide_index=True, width=1100)
-
-            # Map
-            st.subheader("Risk Map")
-            risk_threshold = st.slider("Minimum risk score", 0.0, 1.0, 0.3, 0.05)
-            map_data = ds_test.dropna(subset=["latitude", "longitude"])
-            map_filtered = map_data[map_data[risk_col] >= risk_threshold]
-            if len(map_filtered) > 0:
-                st.map(map_filtered[["latitude", "longitude"]].head(500), size=15)
-                st.caption(f"Showing {min(len(map_filtered), 500):,} inspections with risk >= {risk_threshold}")
-
-        # Establishment lookup — surface the per-establishment factors
-        st.subheader("Lookup Establishment")
-        search = st.text_input("Search by name")
-        if search and "est_name" in ds_test.columns:
-            matches = ds_test[ds_test["est_name"].str.contains(search, case=False, na=False)]
-            if len(matches) > 0:
-                display = ["est_name", "address", "inspection_date", "status", risk_col,
-                           "est_rate_pest", "est_rate_sanitation", "sr_fsa_pest",
-                           "sr_fsa_food", "fire_incidents", "rentsafe_pest",
-                           "cluster_fail_rate"]
-                avail = [c for c in display if c and c in matches.columns]
-                st.dataframe(matches[avail].head(20), hide_index=True, width=1200)
-            else:
-                st.warning("No matches found.")
 
 
 # ============================================================
@@ -2011,6 +1997,29 @@ with tab_nowcast:
                     if len(hourly) > 1:
                         st.line_chart(hourly, y_label="Avg Congestion Level")
 
+        # ---- AI summary ----
+        st.divider()
+        _nc = nowcast or {}
+        _cur_state = "no live VLM data"
+        if vlm is not None and len(vlm) > 0 and "congestion_level" in vlm.columns:
+            _cur_state = (
+                f"{len(vlm)} cameras observed, avg level {vlm['congestion_level'].mean():.2f}, "
+                f"{(vlm['congestion_level'] >= 2).mean() * 100:.0f}% moderate-or-heavy"
+            )
+        nowcast_ctx = (
+            f"Toronto VLM nowcast (next-hour congestion prediction). "
+            f"Current camera state: {_cur_state}. "
+            f"Predicted next hour: {_nc.get('predicted_label', 'n/a')}, "
+            f"trend {_nc.get('trend', 'n/a')}, "
+            f"based on {_nc.get('cameras_observed', 0)} cameras."
+        )
+        if gnn_fc and gnn_fc.get("horizons"):
+            nowcast_ctx += (
+                f" GNN network forecast trend: {gnn_fc.get('trend', 'n/a')} "
+                f"across {gnn_fc.get('n_nodes', '?')} intersections."
+            )
+        render_ai_summary("nowcast", nowcast_ctx)
+
 
 # ============================================================
 # TAB: ANALYTICS — Cross-Project Insights
@@ -2018,8 +2027,8 @@ with tab_nowcast:
 with tab_analytics:
     st.header("📊 Cross-Project Analytics")
     st.caption(
-        "Correlations and patterns across traffic and food safety data. "
-        "Reveals how weather, events, and congestion connect across domains."
+        "Correlations and patterns across the traffic and VLM datasets. "
+        "Reveals how weather, events, and time-of-day connect to congestion."
     )
 
     # Availability check
@@ -2221,6 +2230,32 @@ with tab_analytics:
         else:
             st.caption("No live data sources active yet.")
 
+        # ---- AI summary ----
+        st.divider()
+        _perf_str = "; ".join(
+            f"{r['Project']} {r['Metric']}={r['Score']}" for r in perf_rows
+        ) if perf_rows else "n/a"
+        _top_weather = ""
+        if weather_imp_data:
+            _tw = sorted(weather_imp_data, key=lambda x: -x["Correlation"])[:3]
+            _top_weather = "; top weather correlations: " + ", ".join(
+                f"{w['Feature']} ({w['Project']}) {w['Correlation']}" for w in _tw
+            )
+        analytics_ctx = (
+            f"Cross-project analytics for Toronto urban platform. "
+            f"Active projects: {', '.join(avail_projects)}. "
+            f"Model performance: {_perf_str}{_top_weather}."
+        )
+        render_ai_summary(
+            "analytics", analytics_ctx,
+            instruction=(
+                "You are a data-science lead. In 3-4 plain sentences summarize "
+                "how the models perform across projects and any cross-domain "
+                "patterns (e.g. weather, time-of-day) in the data below. "
+                "No preamble, no bullet points."
+            ),
+        )
+
 
 # ============================================================
 # TAB 9: ARCHITECTURE  (appendix — how we model the data + GPU usage)
@@ -2312,20 +2347,6 @@ with tab_arch:
             '</div></div>',
             unsafe_allow_html=True,
         )
-
-    st.markdown(
-        '<div class="cc-panel" style="margin-top:10px">'
-        '<div class="cc-panel-title">🍽️ DineSafe &amp; 🏠 Housing</div>'
-        '<div style="color:#cfe9d8;font-size:.86rem;line-height:1.5;margin-top:6px">'
-        '<b>DineSafe:</b> XGBoost (0.82 AUC) over inspection history + 311 '
-        'complaints + fire incidents, with <b>nemotron</b> NLP features and a '
-        '<b>txt2kg</b> neighbourhood knowledge graph.<br>'
-        '<b>Housing:</b> three architectures on shelter occupancy + weather + '
-        'bike-share + RentSafeTO — <b>XGBoost</b> (0.93 AUC) for the point '
-        'forecast, <b>LSTM</b> and <b>TFT</b> for sequence/uncertainty '
-        '(GPU-trained).</div></div>',
-        unsafe_allow_html=True,
-    )
 
     st.markdown('<div class="cc-panel-title" style="margin-top:10px">'
                 '🔌 Serving architecture — how models reach this dashboard</div>',
