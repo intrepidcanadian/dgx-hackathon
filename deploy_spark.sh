@@ -143,33 +143,16 @@ if [[ "$TARGET" == "all" || "$TARGET" == "traffic" ]]; then
     echo "=== TRAFFIC ==="
 
     cd "$SCRIPT_DIR/traffic"
-    mkdir -p data/raw data/processed data/enrichment data/simulations \
-             data/monitor_state data/vlm_results data/commute_history models
 
-    echo "  Pulling traffic data from CKAN..."
-    python3 scripts/01_prepare_traffic_data.py
-    ok "Traffic data prepared"
-
-    echo "  Training XGBoost models..."
-    python3 scripts/02_train_model.py
-    ok "Traffic models trained"
-
-    echo "  Pulling enrichment datasets..."
-    python3 scripts/08_enrich_traffic_data.py
-    ok "Enrichment data pulled"
-
-    echo "  Pulling event data..."
-    python3 scripts/13_enrich_events.py
-    ok "Event data enriched"
-
-    echo "  Training VLM nowcast model (leakage-free, observe t -> predict t+1)..."
-    python3 scripts/14_vlm_feedback_loop.py --compare
-    ok "VLM nowcast model trained"
-
-    echo "  Training spatio-temporal GNN + emitting forecast..."
-    python3 scripts/16_gnn_forecast.py --train --epochs 80
-    python3 scripts/16_gnn_forecast.py --forecast
-    ok "GNN forecaster trained + latest_forecast.json written"
+    # Single source of truth: pipeline.py drives the full data→models build
+    # (01 prepare → 08 enrich → 13 events → 02 train → 14 vlm nowcast → 16 gnn).
+    # Uses the RAPIDS/cuML _gpu script variants when a GPU is present.
+    if command -v nvidia-smi &>/dev/null; then
+        python3 pipeline.py build --gpu
+    else
+        python3 pipeline.py build
+    fi
+    ok "Traffic data + models built (pipeline.py)"
 fi
 
 # --- DineSafe ---

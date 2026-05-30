@@ -76,7 +76,32 @@ ollama pull gemma3:4b               # Vision model for camera analysis
 
 ## Usage
 
-### 1. Prepare data and train
+### Quick start — `pipeline.py` (one command does everything)
+
+`pipeline.py` is the single entry point. It drives the numbered `scripts/`
+stages in the correct order so you don't have to remember which to run.
+
+```bash
+python3 pipeline.py build          # full build: pull data → enrich → train all models
+python3 pipeline.py build --gpu    # same, using RAPIDS/cuML GPU script variants (Spark)
+python3 pipeline.py dashboard      # launch the Streamlit dashboard
+python3 pipeline.py all            # build + dashboard in one go
+
+python3 pipeline.py data           # data only (01 prepare + 08 enrich + 13 events)
+python3 pipeline.py train          # models only (02 XGBoost + 14 VLM nowcast + 16 GNN)
+python3 pipeline.py vlm --demo                       # live VLM feed, synthetic (no GPU)
+python3 pipeline.py vlm --live --cameras 50 --interval 300   # real sweeps on the Spark
+python3 pipeline.py nowcast        # recompute next-hour nowcast from current VLM state
+python3 pipeline.py forecast       # emit GNN multi-horizon network forecast
+```
+
+`build` runs: `01 prepare → 08 enrich → 13 events → 02 train → 14 vlm nowcast → 16 gnn`.
+Each stage shells out to its numbered script, so the individual scripts below
+still work standalone if you want fine-grained control.
+
+### Manual — individual stages
+
+#### 1. Prepare data and train
 
 ```bash
 python3 scripts/01_prepare_traffic_data.py   # Pull 346K records from CKAN
