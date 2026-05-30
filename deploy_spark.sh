@@ -161,6 +161,15 @@ if [[ "$TARGET" == "all" || "$TARGET" == "traffic" ]]; then
     echo "  Pulling event data..."
     python3 scripts/13_enrich_events.py
     ok "Event data enriched"
+
+    echo "  Training VLM nowcast model (leakage-free, observe t -> predict t+1)..."
+    python3 scripts/14_vlm_feedback_loop.py --compare
+    ok "VLM nowcast model trained"
+
+    echo "  Training spatio-temporal GNN + emitting forecast..."
+    python3 scripts/16_gnn_forecast.py --train --epochs 80
+    python3 scripts/16_gnn_forecast.py --forecast
+    ok "GNN forecaster trained + latest_forecast.json written"
 fi
 
 # --- DineSafe ---
