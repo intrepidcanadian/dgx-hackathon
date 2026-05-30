@@ -458,6 +458,8 @@ try:
 except ImportError:
     print("Installing umap-learn and hdbscan...")
     try:
+        subprocess.check_call(["sudo", "apt", "install", "-y", "python3-dev"],
+                              timeout=60)
         subprocess.check_call([sys.executable, "-m", "pip", "install",
                                "umap-learn", "hdbscan", "-q"])
         from umap import UMAP
@@ -795,13 +797,14 @@ dtest = xgb.DMatrix(X_test, label=y_test_fail, feature_names=all_features)
 
 model1 = xgb.train({
     "objective": "binary:logistic", "eval_metric": ["logloss", "auc"],
-    "max_depth": 7, "learning_rate": 0.03, "subsample": 0.8,
-    "colsample_bytree": 0.7, "min_child_weight": 5,
+    "max_depth": 6, "learning_rate": 0.02, "subsample": 0.7,
+    "colsample_bytree": 0.6, "min_child_weight": 10,
+    "reg_alpha": 0.5, "reg_lambda": 2.0, "gamma": 0.3,
     "scale_pos_weight": fail_ratio,
     "device": device, "tree_method": "hist",
-}, dtrain, num_boost_round=800,
+}, dtrain, num_boost_round=1500,
     evals=[(dtrain, "train"), (dtest, "test")],
-    early_stopping_rounds=50, verbose_eval=100)
+    early_stopping_rounds=80, verbose_eval=100)
 
 y_prob1 = model1.predict(dtest)
 auc1 = roc_auc_score(y_test_fail, y_prob1)
@@ -827,12 +830,13 @@ dtest_sev = xgb.DMatrix(X_test, label=y_test_sev, feature_names=all_features)
 
 model2 = xgb.train({
     "objective": "reg:squarederror", "eval_metric": ["rmse", "mae"],
-    "max_depth": 7, "learning_rate": 0.03, "subsample": 0.8,
-    "colsample_bytree": 0.7,
+    "max_depth": 6, "learning_rate": 0.02, "subsample": 0.7,
+    "colsample_bytree": 0.6, "min_child_weight": 10,
+    "reg_alpha": 0.5, "reg_lambda": 2.0, "gamma": 0.3,
     "device": device, "tree_method": "hist",
-}, dtrain_sev, num_boost_round=800,
+}, dtrain_sev, num_boost_round=1500,
     evals=[(dtrain_sev, "train"), (dtest_sev, "test")],
-    early_stopping_rounds=50, verbose_eval=100)
+    early_stopping_rounds=80, verbose_eval=100)
 
 y_pred_sev = model2.predict(dtest_sev)
 mae = mean_absolute_error(y_test_sev, y_pred_sev)
