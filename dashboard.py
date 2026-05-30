@@ -79,8 +79,8 @@ st.markdown("""
   radial-gradient(900px 500px at -10% 110%, #0e1722 0%, transparent 55%),
   var(--bg); }
 
-/* Tighten top padding */
-.block-container { padding-top: 1.2rem; padding-bottom: 2rem; max-width: 100%; }
+/* Top padding — clear Streamlit's fixed header toolbar so content isn't cut off */
+.block-container { padding-top: 3.5rem; padding-bottom: 2rem; max-width: 100%; }
 
 /* ---- Headings ---- */
 h1, h2, h3 { letter-spacing: .02em; }
