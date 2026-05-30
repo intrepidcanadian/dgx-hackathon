@@ -126,11 +126,9 @@ echo "Pulling gemma3:4b (VLM for traffic camera analysis)..."
 ollama pull gemma3:4b
 ok "gemma3:4b ready"
 
-if [[ "$TARGET" == "all" || "$TARGET" == "dinesafe" ]]; then
-    echo "Pulling nemotron (NLP for DineSafe violations)..."
-    ollama pull nemotron
-    ok "nemotron ready"
-fi
+echo "Pulling nemotron-3-super:latest (NLP features + dashboard AI summaries)..."
+ollama pull nemotron-3-super:latest
+ok "nemotron-3-super:latest ready"
 
 # ============================================================
 # STEP 4: Data + models (per project)
