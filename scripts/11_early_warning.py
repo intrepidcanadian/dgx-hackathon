@@ -82,7 +82,7 @@ for year, rid in sr_resources.items():
         r = requests.get(url, timeout=120)
         z = zipfile.ZipFile(io.BytesIO(r.content))
         with z.open(z.namelist()[0]) as f:
-            df = pd.read_csv(f, on_bad_lines="skip")
+            df = pd.read_csv(f, on_bad_lines="skip", encoding="latin-1")
         df["Creation Date"] = pd.to_datetime(df["Creation Date"], errors="coerce")
         housing = df[df["Service Request Type"].isin(HOUSING_TYPES)].copy()
         all_311.append(housing)
