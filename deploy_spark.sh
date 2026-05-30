@@ -70,6 +70,20 @@ ok "Python3 available"
 # ============================================================
 step "2/6  Python dependencies"
 
+# DGX OS uses externally-managed Python (PEP 668) — must use a venv
+VENV_DIR="$SCRIPT_DIR/venv"
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Creating virtual environment at $VENV_DIR..."
+    python3 -m venv "$VENV_DIR"
+    ok "Virtual environment created"
+else
+    ok "Virtual environment exists"
+fi
+
+# Activate venv for the rest of the script
+source "$VENV_DIR/bin/activate"
+ok "Activated venv: $(which python3)"
+
 pip install --quiet --upgrade pip
 
 # Core deps (all projects)
@@ -299,21 +313,22 @@ if [[ "$TARGET" == "all" || "$TARGET" == "hermes" ]]; then
     echo "Once Hermes is running, tell it to schedule your traffic monitors."
     echo "Open Hermes (terminal or Telegram) and send these messages:"
     echo ""
+    VENV_PY="$SCRIPT_DIR/venv/bin/python3"
     echo -e "${GREEN}Morning commute (weekdays 6:45 AM):${NC}"
     echo '  "Every weekday at 6:45 AM, run this command and send me the output:'
-    echo "   python3 $SCRIPT_DIR/traffic/scripts/12_commute_optimizer.py\""
+    echo "   $VENV_PY $SCRIPT_DIR/traffic/scripts/12_commute_optimizer.py\""
     echo ""
     echo -e "${GREEN}Evening commute (weekdays 4:30 PM):${NC}"
     echo '  "Every weekday at 4:30 PM, run this command and send me the output:'
-    echo "   python3 $SCRIPT_DIR/traffic/scripts/12_commute_optimizer.py --reverse\""
+    echo "   $VENV_PY $SCRIPT_DIR/traffic/scripts/12_commute_optimizer.py --reverse\""
     echo ""
     echo -e "${GREEN}Traffic monitoring (every 15 min):${NC}"
     echo '  "Every 15 minutes, run this command and alert me if any road hits gridlock:'
-    echo "   python3 $SCRIPT_DIR/traffic/scripts/09_hermes_actionable_monitor.py --cameras 50\""
+    echo "   $VENV_PY $SCRIPT_DIR/traffic/scripts/09_hermes_actionable_monitor.py --cameras 50\""
     echo ""
     echo -e "${GREEN}Full camera sweep (every hour):${NC}"
     echo '  "Every hour from 7 AM to 8 PM on weekdays, run:'
-    echo "   python3 $SCRIPT_DIR/traffic/scripts/07_hermes_traffic_monitor.py --mode summary --cameras 100\""
+    echo "   $VENV_PY $SCRIPT_DIR/traffic/scripts/07_hermes_traffic_monitor.py --mode summary --cameras 100\""
     echo ""
 
     # Create commute config if it doesn't exist
@@ -349,7 +364,7 @@ if command -v hermes &>/dev/null; then
 echo "  • Hermes Agent with Telegram gateway (systemd service)"
 fi
 echo ""
-echo "Quick commands:"
+echo "Quick commands (activate venv first: source venv/bin/activate):"
 echo "  streamlit run traffic/scripts/04_dashboard.py       # Traffic dashboard"
 echo "  streamlit run dinesafe/scripts/05_dashboard.py      # DineSafe dashboard"
 echo "  streamlit run housing/scripts/06_dashboard.py       # Housing dashboard"
