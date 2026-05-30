@@ -218,7 +218,7 @@ with tab1:
             get_line_color=["cr", "cg", 50, 200],
             stroked=True,
             line_width_min_pixels=2,
-            pickable=True,
+            pickable=False,
         )
         layers.append(circle_layer)
 
@@ -260,10 +260,11 @@ with tab1:
                         "{address}<br/>"
                         "Risk: {risk_pct}%<br/>"
                         "Outcome: {status}",
-                "style": {"backgroundColor": "#1a1a2e", "color": "white",
-                          "fontSize": "13px", "padding": "8px"},
+                "style": {"backgroundColor": "white", "color": "#222",
+                          "fontSize": "13px", "padding": "8px",
+                          "border": "1px solid #ccc", "borderRadius": "4px"},
             },
-            map_style="mapbox://styles/mapbox/dark-v10",
+            map_style="mapbox://styles/mapbox/light-v10",
         ))
 
     st.markdown("---")
