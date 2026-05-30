@@ -631,9 +631,38 @@ def make_command_map(camera_df=None, event_list=None, restriction_df=None,
     )
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_road_route(from_lat, from_lon, to_lat, to_lon):
+    """Fetch a street-following driving route from the public OSRM server.
+
+    Returns (path_coords, distance_km, duration_min) where path_coords is a
+    list of [lon, lat] pairs tracing the road network, or None if the lookup
+    fails (no internet, server down, no route). Cached by coordinates so the
+    dashboard's auto-refresh doesn't hammer the routing server.
+    """
+    try:
+        url = (f"https://router.project-osrm.org/route/v1/driving/"
+               f"{from_lon},{from_lat};{to_lon},{to_lat}"
+               f"?overview=full&geometries=geojson")
+        r = requests.get(url, timeout=6)
+        r.raise_for_status()
+        route = (r.json().get("routes") or [None])[0]
+        if not route:
+            return None
+        coords = route["geometry"]["coordinates"]  # [[lon, lat], ...]
+        return coords, route["distance"] / 1000.0, route["duration"] / 60.0
+    except Exception:
+        return None
+
+
 def make_route_map(from_loc, to_loc, from_name, to_name,
-                   camera_df=None, events=None, height=460):
-    """Map showing commute origin/destination with an arc + congestion."""
+                   camera_df=None, events=None, height=460, path_coords=None):
+    """Map showing commute origin/destination with the route + congestion.
+
+    If path_coords (a list of [lon, lat] road-network points) is provided the
+    route is drawn as a street-following PathLayer; otherwise it falls back to
+    a straight origin→destination arc.
+    """
     import pydeck as pdk
 
     mid = {"lat": (from_loc[0] + to_loc[0]) / 2,
@@ -653,19 +682,28 @@ def make_route_map(from_loc, to_loc, from_name, to_name,
                          [255, 215, 64], [255, 140, 30], [255, 60, 70]],
         ))
 
-    # Arc from origin → destination
-    arc_df = pd.DataFrame([{
-        "from_lat": from_loc[0], "from_lon": from_loc[1],
-        "to_lat": to_loc[0], "to_lon": to_loc[1],
-    }])
-    layers.append(pdk.Layer(
-        "ArcLayer", data=arc_df,
-        get_source_position=["from_lon", "from_lat"],
-        get_target_position=["to_lon", "to_lat"],
-        get_source_color=[0, 230, 118, 220],
-        get_target_color=[255, 75, 92, 220],
-        get_width=5, get_height=0.4,
-    ))
+    if path_coords:
+        # Street-following route from OSRM, drawn as a path along the roads
+        path_df = pd.DataFrame({"path": [path_coords]})
+        layers.append(pdk.Layer(
+            "PathLayer", data=path_df, get_path="path",
+            get_color=[0, 210, 255, 230], width_min_pixels=4, get_width=6,
+            cap_rounded=True, joint_rounded=True,
+        ))
+    else:
+        # Fallback: straight origin → destination arc (no road geometry)
+        arc_df = pd.DataFrame([{
+            "from_lat": from_loc[0], "from_lon": from_loc[1],
+            "to_lat": to_loc[0], "to_lon": to_loc[1],
+        }])
+        layers.append(pdk.Layer(
+            "ArcLayer", data=arc_df,
+            get_source_position=["from_lon", "from_lat"],
+            get_target_position=["to_lon", "to_lat"],
+            get_source_color=[0, 230, 118, 220],
+            get_target_color=[255, 75, 92, 220],
+            get_width=5, get_height=0.4,
+        ))
 
     # Endpoints
     pts = pd.DataFrame([
@@ -1667,7 +1705,15 @@ with tab_commute:
             from_loc = LOCATIONS[from_name]
             to_loc = LOCATIONS[to_name]
             distance = haversine_km(from_loc[0], from_loc[1], to_loc[0], to_loc[1])
-            road_dist = distance * 1.3
+
+            # Try a real street-following route (OSRM); fall back to estimate
+            road = fetch_road_route(from_loc[0], from_loc[1], to_loc[0], to_loc[1])
+            if road:
+                route_path, road_dist, drive_min = road
+                sub = f"{drive_min:.0f} min drive · {distance:.1f} km straight line"
+            else:
+                route_path, road_dist, drive_min = None, distance * 1.3, None
+                sub = f"{distance:.1f} km straight line (est.)"
 
             st.markdown(
                 f'<div class="cc-panel" style="margin-top:6px">'
@@ -1676,7 +1722,7 @@ with tab_commute:
                 f'<div style="color:#e6edf3;font-size:1.4rem;font-weight:700;'
                 f'margin-top:2px">{road_dist:.1f} km</div>'
                 f'<div style="color:#7d8da3;font-size:.78rem">'
-                f'{distance:.1f} km straight line</div></div>',
+                f'{sub}</div></div>',
                 unsafe_allow_html=True,
             )
             run_commute = st.button("▶ Find Optimal Departure",
@@ -1700,6 +1746,7 @@ with tab_commute:
                 rdeck = make_route_map(
                     from_loc, to_loc, from_name, to_name,
                     camera_df=route_cam_df, events=events, height=420,
+                    path_coords=route_path,
                 )
                 st.pydeck_chart(rdeck, width='stretch')
             except Exception as e:
