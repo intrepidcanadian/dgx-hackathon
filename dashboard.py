@@ -283,11 +283,10 @@ def load_traffic():
             with open(vlm_meta_file) as f:
                 vlm_meta = json.load(f)
 
-        # VLM history
+        # VLM history is the cumulative database (grows every sweep). It's
+        # loaded in load_live_state() (15s cache) instead of here so newly
+        # appended sweeps show up promptly. Placeholder keeps the key present.
         vlm_history = None
-        vlm_hist_file = TRAFFIC_DATA / "processed" / "vlm_history.parquet"
-        if vlm_hist_file.exists():
-            vlm_history = pd.read_parquet(vlm_hist_file)
 
         return {
             "model": model, "feature_cols": feature_cols, "test": test,
@@ -307,11 +306,17 @@ def load_live_state():
     Kept separate from load_traffic() (1h cache) so a new VLM sweep shows up
     on the next refresh instead of being hidden behind the hour-long cache.
     Returns the three keys merged into the traffic dict by the caller."""
-    out = {"vlm": None, "hermes": None, "nowcast": None}
+    out = {"vlm": None, "hermes": None, "nowcast": None, "vlm_history": None}
     try:
         vlm_file = TRAFFIC_DATA / "vlm_results" / "latest_analysis.csv"
         if vlm_file.exists():
             out["vlm"] = pd.read_csv(vlm_file)
+    except Exception:
+        pass
+    try:
+        vlm_hist_file = TRAFFIC_DATA / "processed" / "vlm_history.parquet"
+        if vlm_hist_file.exists():
+            out["vlm_history"] = pd.read_parquet(vlm_hist_file)
     except Exception:
         pass
     try:
@@ -1260,8 +1265,9 @@ with tab_cameras:
     st.header("📷 Live Traffic Cameras")
     st.caption(
         "Actual live images from Toronto's 336 traffic cameras (refreshed by "
-        "the city every few minutes). Where the VLM monitor has analyzed a "
-        "camera, its congestion classification is overlaid."
+        "the city every few minutes). Each camera shows its most recent VLM "
+        "congestion classification; coverage accumulates toward all 336 as "
+        "successive sweeps analyze more cameras."
     )
 
     if not traffic["available"] or traffic.get("cams") is None:
@@ -1289,22 +1295,62 @@ with tab_cameras:
             LEVEL_LABELS = {0: "🟢 Free flow", 1: "🟡 Light",
                             2: "🟠 Moderate", 3: "🔴 Heavy"}
 
+            # Build a CUMULATIVE per-camera VLM map so coverage grows toward 336
+            # as successive sweeps analyze more cameras — rather than only the
+            # ~50 cameras in the most recent sweep. Sources (newest wins):
+            #   1) vlm_history.parquet — every sweep is appended here
+            #   2) last_state.json     — the latest single sweep
+            vlm_map = {}
+
+            def _ts_of(rec):
+                return str(rec.get("timestamp", "")) if isinstance(rec, dict) else ""
+
+            vh = traffic.get("vlm_history")
+            if (vh is not None and len(vh)
+                    and {"location", "congestion_level"}.issubset(vh.columns)):
+                h = vh.dropna(subset=["location"]).copy()
+                h["_ts"] = pd.to_datetime(h.get("timestamp"), errors="coerce")
+                h = h.sort_values("_ts")
+                for loc, g in h.groupby("location"):
+                    last = g.iloc[-1]
+                    lvl = last.get("congestion_level")
+                    vlm_map[str(loc)] = {
+                        "level": int(lvl) if pd.notna(lvl) else -1,
+                        "vehicles": last.get("vehicle_count_estimate", -1),
+                        "flow": last.get("flow", ""),
+                        "timestamp": (last["_ts"].isoformat()
+                                      if pd.notna(last["_ts"]) else ""),
+                    }
+
+            # Overlay the most recent sweep, keeping whichever record is newer
+            for loc, rec in hermes_state.items():
+                if not isinstance(rec, dict):
+                    continue
+                prev = vlm_map.get(str(loc))
+                if prev is None or _ts_of(rec) >= prev.get("timestamp", ""):
+                    vlm_map[str(loc)] = {
+                        "level": rec.get("level", -1),
+                        "vehicles": rec.get("vehicles", -1),
+                        "flow": rec.get("flow", ""),
+                        "timestamp": _ts_of(rec),
+                    }
+
             def vlm_for(loc_key):
-                rec = hermes_state.get(loc_key)
-                return rec if isinstance(rec, dict) else None
+                return vlm_map.get(loc_key)
 
             cams["vlm_level"] = cams["loc_key"].map(
                 lambda k: (vlm_for(k) or {}).get("level", -1))
 
             n_analyzed = int((cams["vlm_level"] >= 0).sum())
-            ts = ""
-            if hermes_state:
-                ts = next((v.get("timestamp", "") for v in hermes_state.values()
-                           if isinstance(v, dict)), "")
+            n_obs = int(len(vh)) if vh is not None else 0
+            all_ts = [r["timestamp"] for r in vlm_map.values() if r.get("timestamp")]
+            ts = max(all_ts) if all_ts else ""
 
             c1, c2, c3 = st.columns(3)
             c1.metric("Cameras", f"{len(cams):,}")
-            c2.metric("VLM-Analyzed", f"{n_analyzed:,}")
+            c2.metric("VLM-Analyzed", f"{n_analyzed:,}",
+                      help=f"Distinct cameras covered across all sweeps "
+                           f"(cumulative). {n_obs:,} total observations logged.")
             c3.metric("Last VLM Sweep", ts[:16].replace("T", " ") if ts else "—")
             if n_analyzed == 0:
                 st.info(

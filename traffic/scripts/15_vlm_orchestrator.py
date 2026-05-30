@@ -265,12 +265,27 @@ def _generate_description(level, vehicles, location, weather):
 # ============================================================
 # LIVE MODE (Ollama VLM)
 # ============================================================
-def run_live_sweep(cameras_df, ollama_url, model, limit):
-    """Run actual VLM analysis on camera images."""
+def run_live_sweep(cameras_df, ollama_url, model, limit, cycle=0):
+    """Run actual VLM analysis on camera images.
+
+    Rotates through the full camera list across successive cycles so coverage
+    accumulates toward the total (e.g. 336) rather than re-scanning the same
+    first `limit` cameras every sweep.
+    """
     import base64
     import requests as req
 
-    cams = cameras_df.head(limit) if limit else cameras_df
+    total = len(cameras_df)
+    if limit and limit < total:
+        start = (cycle * limit) % total
+        end = start + limit
+        if end <= total:
+            cams = cameras_df.iloc[start:end]
+        else:
+            # wrap around the end of the list
+            cams = pd.concat([cameras_df.iloc[start:], cameras_df.iloc[:end - total]])
+    else:
+        cams = cameras_df
     url_col = [c for c in cams.columns if "image" in c.lower() or "url" in c.lower()]
     if not url_col:
         print("  ERROR: No image URL column in camera data")
@@ -603,7 +618,8 @@ def main():
         else:
             print(f"  Analyzing {args.cameras} cameras via {args.model}...")
             results, state = run_live_sweep(
-                cameras_df, args.ollama_url, args.model, args.cameras)
+                cameras_df, args.ollama_url, args.model, args.cameras,
+                cycle=cycle - 1)
 
         if not results:
             print("  ⚠ No results — retrying next cycle")
