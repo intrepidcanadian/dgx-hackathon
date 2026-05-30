@@ -45,7 +45,7 @@ CKAN_API = "https://ckan0.cf.opendata.inter.prod-toronto.ca/api/3/action/datasto
 
 # Ollama / nemotron for natural-language tab summaries
 OLLAMA_URL = "http://localhost:11434"
-NEMOTRON_MODEL = "nemotron-3-super:latest"
+NEMOTRON_MODEL = "nemotron-3-super"
 
 # ============================================================
 # PAGE CONFIG
@@ -751,7 +751,7 @@ def render_ai_summary(tab_key: str, context: str, instruction: str = ""):
             st.warning(
                 "Couldn't reach nemotron on Ollama "
                 f"({res.get('error', 'no response')}). On the box running the "
-                "dashboard: `ollama serve` then `ollama pull nemotron-3-super:latest`."
+                "dashboard: `ollama serve` then `ollama run nemotron-3-super`."
             )
     if st.session_state.get(state_key):
         st.markdown(

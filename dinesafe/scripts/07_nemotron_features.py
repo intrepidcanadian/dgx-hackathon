@@ -94,7 +94,7 @@ def detect_ollama_model():
         model_names = [m["name"] for m in models]
         print(f"  Ollama models: {model_names}")
 
-        for preferred in ["nemotron-3-super:latest", "nemotron3:33b", "qwen3.6:35b", "gemma4:26b"]:
+        for preferred in ["nemotron-3-super", "nemotron-3-super:latest", "nemotron3:33b", "qwen3.6:35b", "gemma4:26b"]:
             if preferred in model_names:
                 print(f"  Selected: {preferred}")
                 return preferred

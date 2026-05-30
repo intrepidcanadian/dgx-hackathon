@@ -126,9 +126,9 @@ echo "Pulling gemma3:4b (VLM for traffic camera analysis)..."
 ollama pull gemma3:4b
 ok "gemma3:4b ready"
 
-echo "Pulling nemotron-3-super:latest (NLP features + dashboard AI summaries)..."
-ollama pull nemotron-3-super:latest
-ok "nemotron-3-super:latest ready"
+echo "Pulling nemotron-3-super (NLP features + dashboard AI summaries)..."
+ollama pull nemotron-3-super
+ok "nemotron-3-super ready"
 
 # ============================================================
 # STEP 4: Data + models (per project)
