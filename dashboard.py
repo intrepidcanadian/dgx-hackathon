@@ -768,7 +768,7 @@ if refresh_rate > 0:
 # MAIN TABS
 # ============================================================
 (tab_overview, tab_traffic, tab_cameras, tab_nowcast, tab_simulate, tab_commute,
- tab_dinesafe, tab_housing, tab_analytics, tab_arch) = st.tabs([
+ tab_dinesafe, tab_analytics, tab_arch) = st.tabs([
     "🛰️ Command Center",
     "🚗 Traffic",
     "📷 Live Cameras",
@@ -776,7 +776,6 @@ if refresh_rate > 0:
     "🎪 Event Simulation",
     "🧭 Commute Planner",
     "🍽️ DineSafe",
-    "🏠 Housing",
     "📊 Analytics",
     "📐 Architecture",
 ])
@@ -1759,104 +1758,6 @@ with tab_dinesafe:
             else:
                 st.warning("No matches found.")
 
-
-# ============================================================
-# TAB 6: HOUSING
-# ============================================================
-with tab_housing:
-    if not housing["available"]:
-        st.error(f"Housing data not available: {housing.get('error', 'unknown')}")
-        st.caption(
-            "Expected files: housing/data/processed/{train,test}.parquet, "
-            "feature_cols.json and housing/models/{classifier,regressor}.json. "
-            "Regenerate with: `bash deploy_spark.sh housing` (runs scripts "
-            "01 → 03 → 04 → 05 → 10). If you just generated them, the dashboard "
-            "caches loads for 1h — use the ⟳ menu → Clear cache, or restart."
-        )
-    else:
-        st.header("Shelter Demand Predictor")
-
-        import xgboost as xgb
-
-        hdf = housing["df"]
-        clf = housing["clf"]
-        reg = housing["reg"]
-        h_features = housing["feature_cols"]
-
-        # Latest predictions
-        latest_date = hdf["OCCUPANCY_DATE"].max()
-        latest = hdf[hdf["OCCUPANCY_DATE"] == latest_date].copy()
-
-        if len(latest) > 0 and all(c in latest.columns for c in h_features):
-            X = xgb.DMatrix(
-                latest[h_features].values.astype(np.float32),
-                feature_names=h_features,
-            )
-            latest["pred_prob"] = clf.predict(X)
-            latest["pred_at_capacity"] = (latest["pred_prob"] >= 0.5).astype(int)
-            latest["pred_occ_rate"] = reg.predict(X)
-
-            # Overview
-            col1, col2, col3, col4 = st.columns(4)
-            n_total = len(latest)
-            n_full = latest["pred_at_capacity"].sum()
-            avg_pred = latest["pred_occ_rate"].mean()
-
-            col1.metric("Programs Tracked", n_total)
-            col2.metric("Predicted Full", int(n_full),
-                        delta=f"{n_full/n_total:.0%}", delta_color="inverse")
-            col3.metric("Available", n_total - int(n_full))
-            col4.metric("Avg Predicted Occupancy", f"{avg_pred:.1f}%")
-
-            # Sector breakdown
-            st.subheader("By Sector")
-            sector_stats = latest.groupby("SECTOR").agg(
-                programs=("pred_at_capacity", "count"),
-                full=("pred_at_capacity", "sum"),
-                avg_occ=("pred_occ_rate", "mean"),
-            ).reset_index()
-            sector_stats.columns = ["Sector", "Programs", "Predicted Full", "Avg Occupancy %"]
-            st.dataframe(sector_stats, hide_index=True)
-
-            # Available shelters
-            st.subheader("Shelters with Available Beds")
-            available = latest[latest["pred_at_capacity"] == 0].sort_values("pred_occ_rate")
-            if len(available) > 0:
-                show_cols = {
-                    "SHELTER_GROUP": "Shelter",
-                    "LOCATION_NAME": "Location",
-                    "SECTOR": "Sector",
-                    "CAPACITY_ACTUAL_BED": "Capacity",
-                    "occ_rate_today": "Today %",
-                    "pred_occ_rate": "Predicted %",
-                    "pred_prob": "Full Prob",
-                }
-                avail_cols = [c for c in show_cols if c in available.columns]
-                st.dataframe(
-                    available[avail_cols].rename(columns=show_cols).head(30),
-                    hide_index=True, width=1000,
-                )
-
-            # At-capacity shelters
-            st.subheader("Shelters Predicted at Capacity")
-            full = latest[latest["pred_at_capacity"] == 1].sort_values("pred_prob", ascending=False)
-            if len(full) > 0:
-                st.dataframe(
-                    full[avail_cols].rename(columns=show_cols).head(20),
-                    hide_index=True, width=1000,
-                )
-
-        # Historical trend
-        st.subheader("Occupancy Trend")
-        daily_avg = hdf.groupby("OCCUPANCY_DATE")["occ_rate_today"].mean().reset_index()
-        daily_avg.columns = ["Date", "Avg Occupancy %"]
-        st.line_chart(daily_avg.set_index("Date"), y_label="Occupancy %")
-
-        # Sector trends
-        st.subheader("Occupancy by Sector")
-        sector_daily = hdf.groupby(["OCCUPANCY_DATE", "SECTOR"])["occ_rate_today"].mean().reset_index()
-        sector_pivot = sector_daily.pivot(index="OCCUPANCY_DATE", columns="SECTOR", values="occ_rate_today")
-        st.line_chart(sector_pivot, y_label="Occupancy %")
 
 # ============================================================
 # TAB: NOWCAST — VLM-Enhanced Next-Hour Prediction
