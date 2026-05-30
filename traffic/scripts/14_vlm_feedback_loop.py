@@ -1,52 +1,71 @@
 #!/usr/bin/env python3
-"""VLM Feedback Loop — close the gap between observation and prediction.
+"""VLM Feedback Loop — leakage-free temporal nowcasting.
 
-Takes VLM camera analysis results (what's happening NOW) and feeds them
-back into the XGBoost model as features for next-hour prediction.
+Takes VLM camera analysis (what's happening NOW) and uses it to predict
+what happens NEXT. The base XGBoost models congestion from time-of-day
+patterns alone and is blind to today's reality (accidents, weather,
+events). A live VLM reading of the camera *is* the current state — adding
+it as a feature should improve a SHORT-HORIZON forecast.
 
-Pipeline:
-  1. Consolidate all historical VLM runs into a single parquet
-  2. Compute per-camera rolling congestion stats from VLM observations
-  3. Build "current_observed" features for model training
-  4. Retrain XGBoost with VLM features, compare accuracy
-  5. Save nowcast model for real-time prediction
+Honest evaluation — the important part
+--------------------------------------
+The value of VLM features can only be measured without target leakage if
+we predict a DIFFERENT timestep than the one we observe. So this script
+frames the task temporally:
 
-The key insight: XGBoost currently predicts congestion from time-of-day
-patterns alone. Adding "what VLM sees right now" as a feature lets it
-predict what happens NEXT — true nowcasting.
+    observe VLM at time t  ->  predict congestion level at time t+1
 
-New features added:
-  - vlm_current_level: latest VLM congestion at this camera (0-3)
-  - vlm_area_avg: average VLM congestion within 1km radius
-  - vlm_trend: is congestion rising or falling (from last 2 runs)
-  - vlm_incident: was an incident detected by VLM?
-  - vlm_vehicle_count: VLM-estimated vehicle count
+We then train two models on the SAME temporal split and compare:
+  * baseline   : time-of-day + day-of-week + per-camera prior  (patterns only)
+  * VLM-enhanced: baseline + the live observation at t (level, trend,
+                  area pulse, incident flag, vehicle estimate)
 
-Usage:
-  # Consolidate VLM history + retrain
-  python3 14_vlm_feedback_loop.py
+The accuracy delta is the *real* contribution of seeing the current state,
+because the current reading is a causal feature for the future, not a
+noised copy of the label. (The previous version built
+`vlm_current_level = congestion_level + noise` and predicted
+`congestion_level` — that was target leakage and inflated the gain.)
 
-  # Nowcast: predict next-hour congestion using latest VLM state
-  python3 14_vlm_feedback_loop.py --nowcast
+Data
+----
+Real VLM history comes from `data/processed/vlm_history.parquet`
+(consolidated from script 03 / 09 / 15 runs). When none exists, a
+synthetic VLM *time series* is generated with autocorrelated dynamics and
+random incidents — the gain it shows is still leakage-free (the feature is
+the previous step, the target is the next step), it just uses simulated
+dynamics. Clearly labelled as such.
 
-  # Compare model accuracy with/without VLM features
-  python3 14_vlm_feedback_loop.py --compare
+Usage
+-----
+  python3 14_vlm_feedback_loop.py            # consolidate + train + compare
+  python3 14_vlm_feedback_loop.py --compare  # same, with detailed breakdown
+  python3 14_vlm_feedback_loop.py --nowcast  # predict t+1 from latest VLM state
 """
 
 import argparse
-import json
 import glob
-import sys
+import json
 import math
+from datetime import datetime, timedelta
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from datetime import datetime
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 MODEL_DIR = Path(__file__).parent.parent / "models"
 VLM_DIR = DATA_DIR / "vlm_results"
 STATE_DIR = DATA_DIR / "monitor_state"
+PROC_DIR = DATA_DIR / "processed"
+
+LEVEL_NAMES = ["Free Flow", "Light", "Moderate", "Heavy"]
+
+# features available from time-of-day patterns alone (the baseline)
+BASE_FEATURES = ["hour", "day_of_week", "hour_sin", "hour_cos",
+                 "cam_prior_mean", "cam_prior_std"]
+# features that require seeing the live camera (the VLM contribution)
+VLM_FEATURES = ["obs_level", "obs_trend", "area_level",
+                "obs_incident", "obs_vehicles"]
 
 
 def haversine_km(lat1, lon1, lat2, lon2):
@@ -58,6 +77,9 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return R * 2 * math.asin(math.sqrt(a))
 
 
+# ============================================================
+# 1. CONSOLIDATE VLM HISTORY  (unchanged — reads real VLM runs)
+# ============================================================
 def consolidate_vlm_history():
     """Merge all VLM analysis runs into a single time-series parquet."""
     print("=" * 60)
@@ -65,29 +87,24 @@ def consolidate_vlm_history():
     print("=" * 60)
 
     all_records = []
-
-    # From VLM analysis JSONs (script 03)
     vlm_files = sorted(glob.glob(str(VLM_DIR / "*.json")))
     print(f"  VLM analysis files: {len(vlm_files)}")
-
     for fpath in vlm_files:
         try:
             with open(fpath) as f:
                 data = json.load(f)
             if not isinstance(data, list):
                 continue
-
-            # Extract timestamp from filename
             fname = Path(fpath).stem
             ts_parts = fname.split("_")
             if len(ts_parts) >= 3:
                 try:
-                    ts = datetime.strptime(f"{ts_parts[-2]}_{ts_parts[-1]}", "%Y%m%d_%H%M%S")
+                    ts = datetime.strptime(f"{ts_parts[-2]}_{ts_parts[-1]}",
+                                           "%Y%m%d_%H%M%S")
                 except ValueError:
                     ts = datetime.fromtimestamp(Path(fpath).stat().st_mtime)
             else:
                 ts = datetime.fromtimestamp(Path(fpath).stat().st_mtime)
-
             for rec in data:
                 if "congestion_level" not in rec and "level" not in rec:
                     continue
@@ -95,32 +112,25 @@ def consolidate_vlm_history():
                     "timestamp": ts,
                     "camera_id": rec.get("camera_id", rec.get("location", "")),
                     "location": rec.get("location", ""),
-                    "main_road": rec.get("main_road", ""),
                     "latitude": rec.get("latitude"),
                     "longitude": rec.get("longitude"),
                     "vlm_level": rec.get("congestion_level", rec.get("level", -1)),
-                    "vlm_flow": rec.get("flow", rec.get("congestion_label", "")),
-                    "vlm_vehicles": rec.get("vehicle_count_estimate", rec.get("vehicles", -1)),
+                    "vlm_vehicles": rec.get("vehicle_count_estimate",
+                                            rec.get("vehicles", -1)),
                     "vlm_issue": rec.get("issue", "none"),
-                    "vlm_queue": rec.get("queue", "None"),
                 })
         except Exception as e:
             print(f"  Warning: {fpath}: {e}")
 
-    # From Hermes monitor state JSONs (script 09)
     state_files = sorted(glob.glob(str(STATE_DIR / "actionable_*.json")))
     print(f"  Hermes monitor files: {len(state_files)}")
-
     for fpath in state_files:
         try:
             with open(fpath) as f:
                 data = json.load(f)
-
-            ts_str = data.get("timestamp", "")
-            ts = pd.to_datetime(ts_str, errors="coerce")
+            ts = pd.to_datetime(data.get("timestamp", ""), errors="coerce")
             if pd.isna(ts):
                 ts = datetime.fromtimestamp(Path(fpath).stat().st_mtime)
-
             for rec in data.get("results", []):
                 if "level" not in rec:
                     continue
@@ -128,455 +138,335 @@ def consolidate_vlm_history():
                     "timestamp": ts,
                     "camera_id": rec.get("location", ""),
                     "location": rec.get("location", ""),
-                    "main_road": rec.get("main_road", ""),
-                    "latitude": None,
-                    "longitude": None,
+                    "latitude": None, "longitude": None,
                     "vlm_level": rec.get("level", -1),
-                    "vlm_flow": rec.get("flow", ""),
                     "vlm_vehicles": rec.get("vehicles", -1),
                     "vlm_issue": rec.get("issue", "none"),
-                    "vlm_queue": rec.get("queue", "None"),
                 })
         except Exception as e:
             print(f"  Warning: {fpath}: {e}")
 
     if not all_records:
-        print("\n  No VLM data found. Run VLM analysis first:")
-        print("    python3 03_vlm_camera_analysis.py --cameras 50")
-        print("    python3 09_hermes_actionable_monitor.py --cameras 50")
+        print("\n  No real VLM data found — will use synthetic VLM dynamics.")
         return None
 
     vlm_df = pd.DataFrame(all_records)
     vlm_df["timestamp"] = pd.to_datetime(vlm_df["timestamp"])
     vlm_df = vlm_df[vlm_df["vlm_level"] >= 0]
 
-    # Fill lat/lon from camera file
     cam_file = DATA_DIR / "raw" / "traffic_cameras.csv"
     if cam_file.exists():
         cams = pd.read_csv(cam_file)
-        cam_coords = {}
-        for _, c in cams.iterrows():
-            loc = f"{c.get('MAINROAD', '')} & {c.get('CROSSROAD', '')}"
-            cam_coords[loc] = (c.get("latitude"), c.get("longitude"))
-
+        coords = {f"{c.get('MAINROAD', '')} & {c.get('CROSSROAD', '')}":
+                  (c.get("latitude"), c.get("longitude"))
+                  for _, c in cams.iterrows()}
         for idx, row in vlm_df.iterrows():
-            if pd.isna(row["latitude"]) and row["location"] in cam_coords:
-                vlm_df.at[idx, "latitude"] = cam_coords[row["location"]][0]
-                vlm_df.at[idx, "longitude"] = cam_coords[row["location"]][1]
+            if pd.isna(row["latitude"]) and row["location"] in coords:
+                vlm_df.at[idx, "latitude"] = coords[row["location"]][0]
+                vlm_df.at[idx, "longitude"] = coords[row["location"]][1]
 
-    # Save consolidated
-    out_file = DATA_DIR / "processed" / "vlm_history.parquet"
-    vlm_df.to_parquet(out_file, index=False)
-
-    n_runs = vlm_df["timestamp"].nunique()
-    print(f"\n  Consolidated: {len(vlm_df)} observations from {n_runs} VLM runs")
-    print(f"  Cameras covered: {vlm_df['location'].nunique()}")
-    print(f"  Date range: {vlm_df['timestamp'].min()} to {vlm_df['timestamp'].max()}")
-    print(f"  Saved: {out_file}")
-
+    PROC_DIR.mkdir(parents=True, exist_ok=True)
+    vlm_df.to_parquet(PROC_DIR / "vlm_history.parquet", index=False)
+    print(f"\n  Consolidated {len(vlm_df)} observations from "
+          f"{vlm_df['timestamp'].nunique()} runs, "
+          f"{vlm_df['location'].nunique()} cameras")
     return vlm_df
 
 
-def build_vlm_features(vlm_df):
-    """Build VLM-derived features for model training.
+# ============================================================
+# 2. SYNTHETIC VLM TIME SERIES  (autocorrelated, NOT derived from a label)
+# ============================================================
+def make_synthetic_vlm_history(n_cameras=60, n_sweeps=240, interval_min=15,
+                               seed=42):
+    """Generate a believable VLM time series with AR(1) dynamics + incidents.
 
-    For each training record (location + hour + DOW), compute:
-    - vlm_current_level: latest VLM observation for that camera
-    - vlm_area_avg: average VLM level within 1km
-    - vlm_trend: change from previous run (-1 = improving, +1 = worsening)
-    - vlm_has_incident: was an incident detected?
-    - vlm_vehicle_count: VLM-estimated vehicles
+    The gain measured on this data is leakage-free: the model predicts the
+    NEXT sweep from the CURRENT one, so the current observation is a genuine
+    (autocorrelated) predictor, not a copy of the target.
     """
+    print("  Generating synthetic VLM dynamics (no real data found)...")
+    rng = np.random.default_rng(seed)
+    base = rng.uniform(0.2, 1.6, n_cameras)            # per-camera baseline
+    lat = rng.uniform(43.60, 43.78, n_cameras)
+    lon = rng.uniform(-79.55, -79.25, n_cameras)
+    start = datetime.now() - timedelta(minutes=interval_min * n_sweeps)
+
+    level = base.copy()
+    incident_timer = np.zeros(n_cameras)
+    rows = []
+    for s in range(n_sweeps):
+        ts = start + timedelta(minutes=interval_min * s)
+        h = ts.hour + ts.minute / 60.0
+        diurnal = (1.5 * math.exp(-((h - 8.5) ** 2) / 4.0) +
+                   1.8 * math.exp(-((h - 17.5) ** 2) / 5.0))
+        target_mean = np.clip(base + diurnal, 0, 3)
+        # random incidents add a transient bump that patterns can't predict
+        new_inc = rng.random(n_cameras) < 0.01
+        incident_timer[new_inc] = rng.integers(2, 6, new_inc.sum())
+        bump = np.where(incident_timer > 0, 1.0, 0.0)
+        incident_timer = np.maximum(incident_timer - 1, 0)
+        # AR(1) toward diurnal mean + noise + incident
+        level = np.clip(0.65 * level + 0.35 * target_mean +
+                        rng.normal(0, 0.25, n_cameras) + bump, 0, 3)
+        for c in range(n_cameras):
+            rows.append({
+                "timestamp": ts, "camera_id": f"CAM{c:03d}",
+                "location": f"CAM{c:03d}", "latitude": lat[c], "longitude": lon[c],
+                "vlm_level": int(round(level[c])),
+                "vlm_vehicles": int(level[c] * 12 + rng.integers(0, 8)),
+                "vlm_issue": "incident" if bump[c] > 0 else "none",
+            })
+    df = pd.DataFrame(rows)
+    df["_synthetic"] = True
+    return df
+
+
+# ============================================================
+# 3. BUILD TEMPORAL NOWCAST DATASET  (observe t -> predict t+1)
+# ============================================================
+def build_nowcast_dataset(vlm_df):
+    """Rows = (features at t, target = level at t+1) per camera, leakage-free."""
     print("\n" + "=" * 60)
-    print("2. BUILDING VLM FEATURES")
+    print("2. BUILDING TEMPORAL NOWCAST DATASET (observe t -> predict t+1)")
     print("=" * 60)
 
-    if vlm_df is None or len(vlm_df) == 0:
-        print("  No VLM data available — generating synthetic VLM features")
-        print("  (Using historical congestion patterns as VLM proxy)")
-        return build_synthetic_vlm_features()
+    df = vlm_df.copy()
+    df["vlm_level"] = pd.to_numeric(df["vlm_level"], errors="coerce")
+    df = df.dropna(subset=["vlm_level", "timestamp"]).sort_values(
+        ["location", "timestamp"])
+    df["hour"] = df["timestamp"].dt.hour
+    df["day_of_week"] = df["timestamp"].dt.dayofweek
+    df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
+    df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24)
 
-    # Per-camera stats from VLM history
-    cam_stats = vlm_df.groupby("location").agg(
-        vlm_mean_level=("vlm_level", "mean"),
-        vlm_max_level=("vlm_level", "max"),
-        vlm_std_level=("vlm_level", "std"),
-        vlm_incident_rate=("vlm_issue", lambda x: (x != "none").mean()),
-        vlm_mean_vehicles=("vlm_vehicles", lambda x: x[x >= 0].mean() if (x >= 0).any() else 0),
-        vlm_obs_count=("vlm_level", "count"),
-    ).reset_index()
-    cam_stats["vlm_std_level"] = cam_stats["vlm_std_level"].fillna(0)
+    # network "pulse": mean level across all cameras at each sweep
+    area = df.groupby("timestamp")["vlm_level"].mean().rename("area_level")
+    df = df.merge(area, on="timestamp", how="left")
 
-    print(f"  Camera stats computed for {len(cam_stats)} locations")
-    print(f"  Avg VLM level: {cam_stats['vlm_mean_level'].mean():.2f}")
-    print(f"  Incident rate: {cam_stats['vlm_incident_rate'].mean():.3f}")
+    g = df.groupby("location", group_keys=False)
+    # current observation features
+    df["obs_level"] = df["vlm_level"]
+    df["obs_trend"] = g["vlm_level"].diff().fillna(0)
+    df["obs_incident"] = (df["vlm_issue"].astype(str) != "none").astype(int)
+    df["obs_vehicles"] = pd.to_numeric(
+        df["vlm_vehicles"], errors="coerce").fillna(0).clip(lower=0)
+    # per-camera prior from PAST observations only (causal, no leakage)
+    df["cam_prior_mean"] = g["vlm_level"].apply(
+        lambda s: s.shift(1).expanding().mean())
+    df["cam_prior_std"] = g["vlm_level"].apply(
+        lambda s: s.shift(1).expanding().std())
+    gmean = float(df["vlm_level"].mean())
+    df["cam_prior_mean"] = df["cam_prior_mean"].fillna(gmean)
+    df["cam_prior_std"] = df["cam_prior_std"].fillna(0)
 
-    # Per-hour VLM patterns (if enough runs)
-    vlm_df["hour"] = vlm_df["timestamp"].dt.hour
-    hourly_vlm = vlm_df.groupby("hour").agg(
-        vlm_hourly_level=("vlm_level", "mean"),
-        vlm_hourly_vehicles=("vlm_vehicles", lambda x: x[x >= 0].mean() if (x >= 0).any() else 0),
-    ).reset_index()
+    # TARGET = this camera's NEXT observation
+    df["target_level"] = g["vlm_level"].shift(-1)
+    df = df.dropna(subset=["target_level"])
+    df["target_level"] = df["target_level"].round().clip(0, 3).astype(int)
 
-    print(f"  Hourly VLM patterns: {len(hourly_vlm)} hours covered")
-
-    # Area-average computation (1km radius clusters)
-    vlm_geo = vlm_df.dropna(subset=["latitude", "longitude"]).drop_duplicates("location")
-    area_avgs = {}
-    for _, cam in vlm_geo.iterrows():
-        nearby = vlm_geo.apply(
-            lambda r: haversine_km(cam["latitude"], cam["longitude"],
-                                   r["latitude"], r["longitude"]) <= 1.0,
-            axis=1,
-        )
-        nearby_locs = vlm_geo[nearby]["location"]
-        area_data = vlm_df[vlm_df["location"].isin(nearby_locs)]
-        area_avgs[cam["location"]] = area_data["vlm_level"].mean()
-
-    return cam_stats, hourly_vlm, area_avgs
+    print(f"  Samples: {len(df):,}  cameras: {df['location'].nunique()}  "
+          f"sweeps: {df['timestamp'].nunique()}")
+    return df
 
 
-def build_synthetic_vlm_features():
-    """Generate synthetic VLM features from training data patterns.
-
-    When no VLM data exists yet, use historical congestion levels
-    as a proxy for what VLM would observe. This lets us:
-    1. Build the feature pipeline
-    2. Test the model architecture
-    3. Estimate the upper bound of VLM improvement
-    """
-    print("  Building synthetic VLM features from congestion patterns...")
-
-    test = pd.read_parquet(DATA_DIR / "processed" / "test.parquet")
-
-    # Simulate VLM observations with noise
-    np.random.seed(42)
-    cam_stats = test.groupby("location_enc").agg(
-        vlm_mean_level=("congestion_level", "mean"),
-        vlm_max_level=("congestion_level", "max"),
-        vlm_std_level=("congestion_level", "std"),
-    ).reset_index()
-    cam_stats["vlm_incident_rate"] = np.random.beta(1, 20, len(cam_stats))
-    cam_stats["vlm_mean_vehicles"] = test.groupby("location_enc")["total_vehicles"].mean().values
-    cam_stats["vlm_obs_count"] = test.groupby("location_enc").size().values
-    cam_stats = cam_stats.rename(columns={"location_enc": "location"})
-    cam_stats["location"] = cam_stats["location"].astype(str)
-
-    hourly_vlm = test.groupby("hour").agg(
-        vlm_hourly_level=("congestion_level", "mean"),
-        vlm_hourly_vehicles=("total_vehicles", "mean"),
-    ).reset_index()
-
-    return cam_stats, hourly_vlm, {}
-
-
-def retrain_with_vlm(cam_stats, hourly_vlm, area_avgs, compare=False):
-    """Retrain XGBoost with VLM-derived features."""
+# ============================================================
+# 4. TRAIN + HONEST COMPARISON
+# ============================================================
+def train_nowcast_models(ds, compare=False, synthetic=False):
     import xgboost as xgb
-    from sklearn.metrics import (roc_auc_score, accuracy_score,
-                                 classification_report)
+    from sklearn.metrics import accuracy_score, mean_absolute_error
 
     print("\n" + "=" * 60)
-    print("3. RETRAINING WITH VLM FEATURES")
+    print("3. TRAIN: baseline (patterns) vs VLM-enhanced (live state)")
     print("=" * 60)
 
-    train = pd.read_parquet(DATA_DIR / "processed" / "train.parquet")
-    test = pd.read_parquet(DATA_DIR / "processed" / "test.parquet")
+    # time-based split so we never train on the future
+    cutoff = ds["timestamp"].quantile(0.7)
+    tr, te = ds[ds["timestamp"] <= cutoff], ds[ds["timestamp"] > cutoff]
+    if len(te) < 20:                       # fallback for tiny datasets
+        n = int(len(ds) * 0.7)
+        tr, te = ds.iloc[:n], ds.iloc[n:]
+    y_tr, y_te = tr["target_level"].values, te["target_level"].values
+    print(f"  Train {len(tr):,}  Test {len(te):,}  "
+          f"(split at {pd.Timestamp(cutoff).strftime('%Y-%m-%d %H:%M')})")
 
-    with open(DATA_DIR / "processed" / "feature_cols.json") as f:
-        base_features = json.load(f)
+    def fit(features):
+        params = {"objective": "multi:softprob", "num_class": 4,
+                  "max_depth": 6, "learning_rate": 0.1, "subsample": 0.9,
+                  "colsample_bytree": 0.9, "eval_metric": "mlogloss",
+                  "tree_method": "hist", "verbosity": 0}
+        try:
+            params["device"] = "cuda"
+            m = xgb.train(params, xgb.DMatrix(tr[features].values, label=y_tr,
+                          feature_names=features), num_boost_round=200)
+        except Exception:
+            params.pop("device", None)
+            m = xgb.train(params, xgb.DMatrix(tr[features].values, label=y_tr,
+                          feature_names=features), num_boost_round=200)
+        prob = m.predict(xgb.DMatrix(te[features].values, feature_names=features))
+        pred = prob.argmax(axis=1)
+        return m, accuracy_score(y_te, pred), mean_absolute_error(y_te, pred), pred
 
-    print(f"  Base features: {len(base_features)}")
-    print(f"  Train: {len(train)}, Test: {len(test)}")
+    base_m, base_acc, base_mae, _ = fit(BASE_FEATURES)
+    all_features = BASE_FEATURES + VLM_FEATURES
+    vlm_m, vlm_acc, vlm_mae, vlm_pred = fit(all_features)
 
-    # Add VLM features to train and test
-    for df in [train, test]:
-        # Per-location VLM stats
-        loc_str = df["location_enc"].astype(str)
+    # persistence reference: "next = current" (what the live VLM alone gives)
+    persist_acc = accuracy_score(y_te, te["obs_level"].round().clip(0, 3).astype(int))
 
-        cam_lookup = cam_stats.set_index("location")
-        df["vlm_mean_level"] = loc_str.map(
-            cam_lookup["vlm_mean_level"]).fillna(cam_stats["vlm_mean_level"].median())
-        df["vlm_max_level"] = loc_str.map(
-            cam_lookup["vlm_max_level"]).fillna(cam_stats["vlm_max_level"].median())
-        df["vlm_std_level"] = loc_str.map(
-            cam_lookup["vlm_std_level"]).fillna(0)
-        df["vlm_incident_rate"] = loc_str.map(
-            cam_lookup["vlm_incident_rate"]).fillna(0)
-        df["vlm_mean_vehicles"] = loc_str.map(
-            cam_lookup["vlm_mean_vehicles"]).fillna(cam_stats["vlm_mean_vehicles"].median())
+    tag = "  [SYNTHETIC dynamics — leakage-free, not real data]" if synthetic else ""
+    print(f"\n  Next-step accuracy{tag}")
+    print(f"    baseline  (patterns only) : {base_acc:.4f}   MAE {base_mae:.3f}")
+    print(f"    VLM-enhanced (live state)  : {vlm_acc:.4f}   MAE {vlm_mae:.3f}")
+    print(f"    persistence (next=current) : {persist_acc:.4f}")
+    print(f"    REAL gain from VLM         : {(vlm_acc - base_acc) * 100:+.2f}% acc, "
+          f"{base_mae - vlm_mae:+.3f} MAE")
 
-        # Per-hour VLM patterns
-        hour_lookup = hourly_vlm.set_index("hour")
-        df["vlm_hourly_level"] = df["hour"].map(
-            hour_lookup["vlm_hourly_level"]).fillna(1.0)
-        df["vlm_hourly_vehicles"] = df["hour"].map(
-            hour_lookup["vlm_hourly_vehicles"]).fillna(0)
-
-        # Simulated current observation (noisy version of actual for training)
-        # In production, this would be the LIVE VLM reading
-        np.random.seed(42)
-        noise = np.random.normal(0, 0.3, len(df))
-        df["vlm_current_level"] = np.clip(
-            df["congestion_level"] + noise, 0, 3).round(1)
-
-        # VLM-model agreement (meta-feature)
-        df["vlm_model_diff"] = df["vlm_current_level"] - df["vlm_hourly_level"]
-
-    vlm_features = [
-        "vlm_mean_level", "vlm_max_level", "vlm_std_level",
-        "vlm_incident_rate", "vlm_mean_vehicles",
-        "vlm_hourly_level", "vlm_hourly_vehicles",
-        "vlm_current_level", "vlm_model_diff",
-    ]
-
-    all_features = base_features + vlm_features
-    print(f"  VLM features added: {len(vlm_features)}")
-    print(f"  Total features: {len(all_features)}")
-
-    # Train enhanced model
-    y_train = train["congestion_level"].astype(int)
-    y_test = test["congestion_level"].astype(int)
-
-    X_train = train[all_features].values
-    X_test = test[all_features].values
-
-    dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=all_features)
-    dtest = xgb.DMatrix(X_test, label=y_test, feature_names=all_features)
-
-    params = {
-        "objective": "multi:softprob",
-        "num_class": 4,
-        "max_depth": 8,
-        "learning_rate": 0.1,
-        "subsample": 0.8,
-        "colsample_bytree": 0.8,
-        "eval_metric": "mlogloss",
-        "tree_method": "hist",
-        "verbosity": 0,
-    }
-
-    # Try GPU
-    try:
-        params["device"] = "cuda"
-        model = xgb.train(params, dtrain, num_boost_round=300,
-                          evals=[(dtrain, "train"), (dtest, "test")],
-                          verbose_eval=100)
-    except Exception:
-        params.pop("device", None)
-        model = xgb.train(params, dtrain, num_boost_round=300,
-                          evals=[(dtrain, "train"), (dtest, "test")],
-                          verbose_eval=100)
-
-    # Evaluate
-    pred_probs = model.predict(dtest)
-    pred_levels = pred_probs.argmax(axis=1)
-
-    accuracy = accuracy_score(y_test, pred_levels)
-    print(f"\n  Enhanced model accuracy: {accuracy:.4f}")
-    print(classification_report(y_test, pred_levels,
-          target_names=["Low", "Moderate", "High", "Very High"]))
-
-    # Feature importance
-    importance = model.get_score(importance_type="gain")
-    vlm_imp = {k: v for k, v in importance.items() if k.startswith("vlm_")}
-    print("  VLM feature importance:")
-    for feat, imp in sorted(vlm_imp.items(), key=lambda x: -x[1]):
-        print(f"    {feat:30s} {imp:.1f}")
-
-    # Compare with base model
     if compare:
-        print("\n" + "=" * 60)
-        print("4. COMPARISON: BASE vs VLM-ENHANCED")
-        print("=" * 60)
+        print("\n  Per-class recall (baseline -> VLM-enhanced):")
+        for lvl, name in enumerate(LEVEL_NAMES):
+            mask = y_te == lvl
+            if mask.sum() == 0:
+                continue
+            bcls = base_m.predict(xgb.DMatrix(
+                te[BASE_FEATURES].values, feature_names=BASE_FEATURES)
+            ).argmax(axis=1)
+            b = (bcls[mask] == lvl).mean()
+            v = (vlm_pred[mask] == lvl).mean()
+            print(f"    {name:11s}  {b:.3f} -> {v:.3f}  ({v-b:+.3f})")
 
-        base_model = xgb.Booster()
-        base_model.load_model(str(MODEL_DIR / "xgb_congestion_multi.json"))
+    importance = vlm_m.get_score(importance_type="gain")
+    vlm_imp = {k: v for k, v in importance.items() if k in VLM_FEATURES}
+    print("\n  VLM feature importance (gain):")
+    for f, v in sorted(vlm_imp.items(), key=lambda x: -x[1]):
+        print(f"    {f:14s} {v:.1f}")
 
-        dtest_base = xgb.DMatrix(test[base_features].values,
-                                  feature_names=base_features)
-        base_probs = base_model.predict(dtest_base)
-        base_levels = base_probs.argmax(axis=1)
-        base_acc = accuracy_score(y_test, base_levels)
-
-        print(f"  Base model accuracy:     {base_acc:.4f}")
-        print(f"  VLM-enhanced accuracy:   {accuracy:.4f}")
-        print(f"  Improvement:             {(accuracy - base_acc) * 100:+.2f}%")
-
-        # Per-class comparison
-        for lvl, name in enumerate(["Low", "Moderate", "High", "Very High"]):
-            mask = y_test == lvl
-            base_cls = (base_levels[mask] == lvl).mean()
-            vlm_cls = (pred_levels[mask] == lvl).mean()
-            print(f"  {name:12s}  base={base_cls:.3f}  vlm={vlm_cls:.3f}  diff={vlm_cls-base_cls:+.3f}")
-
-    # Save enhanced model
-    model.save_model(str(MODEL_DIR / "xgb_congestion_vlm.json"))
-    print(f"\n  Saved: {MODEL_DIR / 'xgb_congestion_vlm.json'}")
-
-    # Save enhanced feature list
-    with open(DATA_DIR / "processed" / "feature_cols_vlm.json", "w") as f:
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    vlm_m.save_model(str(MODEL_DIR / "xgb_congestion_vlm.json"))
+    with open(PROC_DIR / "feature_cols_vlm.json", "w") as f:
         json.dump(all_features, f)
-
-    # Save metadata
     meta = {
-        "base_features": len(base_features),
-        "vlm_features": len(vlm_features),
+        "task": "temporal nowcast (observe t -> predict t+1)",
+        "synthetic": bool(synthetic),
+        "base_features": len(BASE_FEATURES),
+        "vlm_features": len(VLM_FEATURES),
         "total_features": len(all_features),
-        "accuracy": float(accuracy),
+        "baseline_accuracy": float(base_acc),
+        "accuracy": float(vlm_acc),
+        "vlm_gain": float(vlm_acc - base_acc),
+        "persistence_accuracy": float(persist_acc),
         "vlm_feature_importance": {k: float(v) for k, v in vlm_imp.items()},
         "timestamp": datetime.now().isoformat(),
     }
     with open(MODEL_DIR / "vlm_model_metadata.json", "w") as f:
         json.dump(meta, f, indent=2)
+    print(f"\n  Saved model + metadata to {MODEL_DIR}/")
+    return vlm_m, all_features, meta
 
-    return model, all_features, accuracy
 
-
-def nowcast(model=None, feature_cols=None):
-    """Predict next-hour congestion using latest VLM state."""
+# ============================================================
+# 5. NOWCAST  (predict t+1 from the latest live VLM state)
+# ============================================================
+def nowcast():
     import xgboost as xgb
 
     print("\n" + "=" * 60)
-    print("NOWCAST — Next-Hour Prediction")
+    print("NOWCAST — predict next sweep from current VLM state")
     print("=" * 60)
 
-    # Load VLM-enhanced model
-    if model is None:
-        vlm_model_file = MODEL_DIR / "xgb_congestion_vlm.json"
-        if not vlm_model_file.exists():
-            print("  No VLM model found. Run without --nowcast first to train.")
-            return
-        model = xgb.Booster()
-        model.load_model(str(vlm_model_file))
+    model_file = MODEL_DIR / "xgb_congestion_vlm.json"
+    if not model_file.exists():
+        print("  No VLM model. Run without --nowcast first to train.")
+        return
+    model = xgb.Booster()
+    model.load_model(str(model_file))
+    with open(PROC_DIR / "feature_cols_vlm.json") as f:
+        feature_cols = json.load(f)
 
-    if feature_cols is None:
-        with open(DATA_DIR / "processed" / "feature_cols_vlm.json") as f:
-            feature_cols = json.load(f)
-
-    # Load latest VLM state
     state_file = STATE_DIR / "last_state.json"
     if not state_file.exists():
-        print("  No VLM state found. Run camera analysis first.")
+        print("  No live VLM state. Run a camera sweep first.")
         return
-
     with open(state_file) as f:
         current_state = json.load(f)
 
-    print(f"  Latest VLM state: {len(current_state)} cameras")
-
-    # Get current conditions
+    levels = [d.get("level", 1) for d in current_state.values()]
+    if not levels:
+        print("  Empty VLM state.")
+        return
+    area_level = float(np.mean(levels))
     now = datetime.now()
-    next_hour = now.hour + 1
 
-    # Build prediction features using test data as template
-    test = pd.read_parquet(DATA_DIR / "processed" / "test.parquet")
-    time_slice = test[test["hour"] == next_hour]
-    if len(time_slice) < 50:
-        time_slice = test[test["hour"] == now.hour]
+    rows = []
+    for cam, d in current_state.items():
+        lvl = d.get("level", 1)
+        rows.append({
+            "hour": now.hour, "day_of_week": now.weekday(),
+            "hour_sin": math.sin(2 * math.pi * now.hour / 24),
+            "hour_cos": math.cos(2 * math.pi * now.hour / 24),
+            "cam_prior_mean": area_level, "cam_prior_std": float(np.std(levels)),
+            "obs_level": lvl, "obs_trend": 0, "area_level": area_level,
+            "obs_incident": 1 if d.get("issue", "none") != "none" else 0,
+            "obs_vehicles": max(d.get("vehicles", 0), 0),
+        })
+    X = pd.DataFrame(rows)[feature_cols].values
+    pred = model.predict(xgb.DMatrix(X, feature_names=feature_cols)).argmax(axis=1)
 
-    # Sample a representative set
-    sample = time_slice.sample(min(100, len(time_slice)), random_state=42).copy()
+    cur_avg = area_level
+    next_avg = float(pred.mean())
+    pred_label = LEVEL_NAMES[min(int(round(next_avg)), 3)]
+    trend = ("WORSENING" if next_avg > cur_avg + 0.3
+             else "IMPROVING" if next_avg < cur_avg - 0.3 else "STABLE")
 
-    # Override hour to next hour
-    sample["hour"] = next_hour
+    print(f"  Cameras observed: {len(rows)}")
+    print(f"  Current avg: {cur_avg:.2f} ({LEVEL_NAMES[min(int(round(cur_avg)),3)]})")
+    print(f"  Next sweep:  {next_avg:.2f} ({pred_label})  trend={trend}")
 
-    # Inject current VLM observations
-    current_levels = [d.get("level", 1) for d in current_state.values()]
-    avg_current = np.mean(current_levels) if current_levels else 1.0
-
-    # Add VLM features (fill from current state)
-    sample["vlm_mean_level"] = avg_current
-    sample["vlm_max_level"] = max(current_levels) if current_levels else 2
-    sample["vlm_std_level"] = np.std(current_levels) if current_levels else 0.5
-    sample["vlm_incident_rate"] = sum(
-        1 for d in current_state.values()
-        if d.get("issue", "none") != "none") / max(len(current_state), 1)
-    sample["vlm_mean_vehicles"] = np.mean([
-        d.get("vehicles", 0) for d in current_state.values()
-        if d.get("vehicles", 0) > 0]) if current_state else 0
-    sample["vlm_hourly_level"] = avg_current
-    sample["vlm_hourly_vehicles"] = sample["vlm_mean_vehicles"]
-    sample["vlm_current_level"] = avg_current
-    sample["vlm_model_diff"] = 0
-
-    # Predict
-    missing = [c for c in feature_cols if c not in sample.columns]
-    for c in missing:
-        sample[c] = 0
-
-    X = sample[feature_cols].values
-    dmat = xgb.DMatrix(X, feature_names=feature_cols)
-    pred_probs = model.predict(dmat)
-    pred_levels = pred_probs.argmax(axis=1)
-
-    avg_pred = pred_levels.mean()
-    level_names = ["Low", "Moderate", "Heavy", "Gridlock"]
-    pred_label = level_names[min(int(avg_pred), 3)]
-
-    print(f"\n  Current time: {now.strftime('%H:%M')}")
-    print(f"  Current VLM avg: {avg_current:.1f} ({level_names[min(int(avg_current), 3)]})")
-    print(f"  Next hour ({next_hour:02d}:00) prediction: {avg_pred:.1f} ({pred_label})")
-
-    # Trend
-    if avg_pred > avg_current + 0.3:
-        trend = "WORSENING"
-    elif avg_pred < avg_current - 0.3:
-        trend = "IMPROVING"
-    else:
-        trend = "STABLE"
-    print(f"  Trend: {trend}")
-
-    # Level distribution
-    for lvl in range(4):
-        pct = (pred_levels == lvl).mean() * 100
-        print(f"    {level_names[lvl]:12s}: {pct:.0f}%")
-
-    # Save nowcast
     nowcast_data = {
         "timestamp": now.isoformat(),
-        "current_vlm_avg": float(avg_current),
-        "next_hour": next_hour,
-        "predicted_avg": float(avg_pred),
+        "current_vlm_avg": float(cur_avg),
+        "next_hour": (now.hour + 1) % 24,
+        "predicted_avg": next_avg,
         "predicted_label": pred_label,
         "trend": trend,
-        "cameras_observed": len(current_state),
+        "cameras_observed": len(rows),
         "distribution": {
-            level_names[i]: float((pred_levels == i).mean())
-            for i in range(4)
+            LEVEL_NAMES[i]: float((pred == i).mean()) for i in range(4)
         },
     }
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
     with open(STATE_DIR / "latest_nowcast.json", "w") as f:
         json.dump(nowcast_data, f, indent=2)
-    print(f"\n  Saved: {STATE_DIR / 'latest_nowcast.json'}")
-
+    print(f"  Saved: {STATE_DIR / 'latest_nowcast.json'}")
     return nowcast_data
 
 
+# ============================================================
 def main():
-    parser = argparse.ArgumentParser(description="VLM Feedback Loop")
-    parser.add_argument("--nowcast", action="store_true",
-                        help="Predict next-hour congestion from current VLM state")
-    parser.add_argument("--compare", action="store_true",
-                        help="Compare base vs VLM-enhanced model accuracy")
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser(description="VLM feedback loop — temporal nowcast")
+    ap.add_argument("--nowcast", action="store_true",
+                    help="predict next sweep from current VLM state")
+    ap.add_argument("--compare", action="store_true",
+                    help="detailed baseline vs VLM-enhanced breakdown")
+    args = ap.parse_args()
 
     if args.nowcast:
         nowcast()
         return
 
-    # Full pipeline
     vlm_df = consolidate_vlm_history()
-    cam_stats, hourly_vlm, area_avgs = build_vlm_features(vlm_df)
-    model, features, accuracy = retrain_with_vlm(
-        cam_stats, hourly_vlm, area_avgs, compare=args.compare)
+    synthetic = vlm_df is None or vlm_df["location"].nunique() < 5 or \
+        vlm_df["timestamp"].nunique() < 5
+    if synthetic:
+        vlm_df = make_synthetic_vlm_history()
+
+    ds = build_nowcast_dataset(vlm_df)
+    train_nowcast_models(ds, compare=args.compare, synthetic=synthetic)
 
     print("\n" + "=" * 60)
-    print("DONE")
+    print("DONE — gain above is leakage-free (observe t -> predict t+1)")
     print("=" * 60)
-    print(f"  VLM-enhanced model saved to: {MODEL_DIR / 'xgb_congestion_vlm.json'}")
-    print(f"  Run nowcast: python3 14_vlm_feedback_loop.py --nowcast")
-    print(f"  Compare:     python3 14_vlm_feedback_loop.py --compare")
+    print("  Nowcast: python3 14_vlm_feedback_loop.py --nowcast")
 
 
 if __name__ == "__main__":
