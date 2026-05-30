@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""Train shelter occupancy prediction models."""
+
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
+from sklearn.metrics import (
+    classification_report, roc_auc_score, mean_absolute_error, mean_squared_error
+)
+import pickle
+
+DATA_DIR = Path(__file__).parent.parent / "data" / "processed"
+MODEL_DIR = Path(__file__).parent.parent / "models"
+MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+train = pd.read_parquet(DATA_DIR / "train.parquet")
+test = pd.read_parquet(DATA_DIR / "test.parquet")
+
+feature_cols = [
+    "day_of_week", "day_of_month", "month", "is_weekend", "day_of_year",
+    "month_sin", "month_cos", "dow_sin", "dow_cos",
+    "sector_enc", "program_model_enc",
+    "CAPACITY_ACTUAL_BED",
+    "occ_rate_lag_1", "occ_rate_lag_3", "occ_rate_lag_7", "occ_rate_lag_14",
+    "occupied_lag_1", "occupied_lag_3", "occupied_lag_7", "occupied_lag_14",
+    "occ_rate_roll_7", "occ_rate_roll_14", "occ_rate_roll_30",
+    "occ_rate_std_7", "occ_rate_std_14", "occ_rate_std_30",
+    "occ_trend_7d",
+    "spare_beds", "unavail_ratio",
+    "program_hist_mean", "program_hist_at_cap_rate",
+]
+
+X_train = train[feature_cols].values
+X_test = test[feature_cols].values
+
+# ---- Model 1: Classification (will shelter hit 100%?) ----
+print("=" * 60)
+print("MODEL 1: At-Capacity Classification")
+print("=" * 60)
+
+y_train_cls = train["at_capacity"].values
+y_test_cls = test["at_capacity"].values
+
+clf = GradientBoostingClassifier(
+    n_estimators=300,
+    max_depth=6,
+    learning_rate=0.1,
+    subsample=0.8,
+    min_samples_leaf=20,
+    random_state=42,
+)
+print("Training classifier...")
+clf.fit(X_train, y_train_cls)
+
+y_pred_cls = clf.predict(X_test)
+y_prob_cls = clf.predict_proba(X_test)[:, 1]
+
+print(f"\nClassification Report (test set):")
+print(classification_report(y_test_cls, y_pred_cls, target_names=["Below 100%", "At/Over 100%"]))
+print(f"ROC AUC: {roc_auc_score(y_test_cls, y_prob_cls):.4f}")
+
+# Feature importance
+print(f"\nTop 15 features (classification):")
+imp = sorted(zip(feature_cols, clf.feature_importances_), key=lambda x: -x[1])
+for name, score in imp[:15]:
+    bar = "#" * int(score * 200)
+    print(f"  {name:30s} {score:.4f} {bar}")
+
+# ---- Model 2: Regression (predict occupancy rate) ----
+print("\n" + "=" * 60)
+print("MODEL 2: Occupancy Rate Regression")
+print("=" * 60)
+
+y_train_reg = train["OCCUPANCY_RATE_BEDS"].values
+y_test_reg = test["OCCUPANCY_RATE_BEDS"].values
+
+reg = GradientBoostingRegressor(
+    n_estimators=300,
+    max_depth=6,
+    learning_rate=0.1,
+    subsample=0.8,
+    min_samples_leaf=20,
+    random_state=42,
+)
+print("Training regressor...")
+reg.fit(X_train, y_train_reg)
+
+y_pred_reg = reg.predict(X_test)
+
+mae = mean_absolute_error(y_test_reg, y_pred_reg)
+rmse = np.sqrt(mean_squared_error(y_test_reg, y_pred_reg))
+print(f"\nMAE:  {mae:.2f}% occupancy")
+print(f"RMSE: {rmse:.2f}% occupancy")
+
+# Residual analysis
+residuals = y_test_reg - y_pred_reg
+print(f"Mean residual: {residuals.mean():.3f}")
+print(f"Residual std:  {residuals.std():.3f}")
+
+pct_within_2 = (np.abs(residuals) <= 2).mean()
+pct_within_5 = (np.abs(residuals) <= 5).mean()
+print(f"Predictions within 2%: {pct_within_2:.1%}")
+print(f"Predictions within 5%: {pct_within_5:.1%}")
+
+print(f"\nTop 15 features (regression):")
+imp_r = sorted(zip(feature_cols, reg.feature_importances_), key=lambda x: -x[1])
+for name, score in imp_r[:15]:
+    bar = "#" * int(score * 200)
+    print(f"  {name:30s} {score:.4f} {bar}")
+
+# ---- Save models ----
+with open(MODEL_DIR / "classifier.pkl", "wb") as f:
+    pickle.dump(clf, f)
+with open(MODEL_DIR / "regressor.pkl", "wb") as f:
+    pickle.dump(reg, f)
+
+print(f"\nModels saved to {MODEL_DIR}/")
+
+# ---- Sample predictions ----
+print("\n" + "=" * 60)
+print("SAMPLE PREDICTIONS (test set, first day)")
+print("=" * 60)
+
+first_date = test["OCCUPANCY_DATE"].min()
+day_data = test[test["OCCUPANCY_DATE"] == first_date].copy()
+day_data["pred_at_capacity"] = clf.predict(day_data[feature_cols].values)
+day_data["pred_prob"] = clf.predict_proba(day_data[feature_cols].values)[:, 1]
+day_data["pred_occ_rate"] = reg.predict(day_data[feature_cols].values)
+
+print(f"\nDate: {first_date.date()}")
+print(f"Programs reporting: {len(day_data)}")
+print(f"Predicted at capacity: {day_data['pred_at_capacity'].sum()} / {len(day_data)}")
+print(f"Actual at capacity:    {day_data['at_capacity'].sum()} / {len(day_data)}")
+
+cols = ["SHELTER_GROUP", "LOCATION_NAME", "SECTOR", "CAPACITY_ACTUAL_BED",
+        "OCCUPANCY_RATE_BEDS", "pred_occ_rate", "pred_prob", "at_capacity", "pred_at_capacity"]
+print(f"\nShelters with available beds (predicted):")
+available = day_data[day_data["pred_at_capacity"] == 0].sort_values("pred_occ_rate")
+print(available[cols].head(15).to_string(index=False))
+
+print(f"\nShelters predicted at capacity (highest confidence):")
+full = day_data[day_data["pred_at_capacity"] == 1].sort_values("pred_prob", ascending=False)
+print(full[cols].head(15).to_string(index=False))
