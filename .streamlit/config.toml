@@ -1,0 +1,16 @@
+# Toronto Intelligence Platform — Command Center theme
+[theme]
+base = "dark"
+primaryColor = "#00e676"
+backgroundColor = "#0a0e16"
+secondaryBackgroundColor = "#131a26"
+textColor = "#e6edf3"
+font = "monospace"
+
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+
+[browser]
+gatherUsageStats = false
