@@ -491,6 +491,89 @@ def get_live_congestion():
     return {}
 
 
+def get_live_road_levels(max_age_min=45):
+    """Summarize the latest VLM camera sweep into per-road live congestion.
+
+    Reads data/monitor_state/last_state.json (written by the Hermes monitor /
+    VLM orchestrator). That file is keyed by "MAINROAD & CROSSROAD" with
+    {level, flow, vehicles, timestamp}. We bucket the observed levels by the
+    corridor road names so near-term departure windows can be blended with
+    what the cameras see *right now* instead of pure historical pattern.
+
+    Returns (live_overall, live_road_levels, n_cams, age_min):
+      live_overall      float mean level across all valid cameras, or None
+      live_road_levels  {ROAD_UPPER: mean_level} for corridor roads seen live
+      n_cams            number of valid camera observations
+      age_min           minutes since the freshest observation (None if unknown)
+
+    Stale sweeps (older than max_age_min) are ignored so we never blend live
+    data that no longer reflects current conditions.
+    """
+    state = get_live_congestion()
+    if not state:
+        return None, {}, 0, None
+
+    # Freshness guard — find the newest timestamp in the state file.
+    newest = None
+    for d in state.values():
+        ts = d.get("timestamp")
+        if ts:
+            t = pd.to_datetime(ts, errors="coerce")
+            if pd.notna(t) and (newest is None or t > newest):
+                newest = t
+    age_min = None
+    if newest is not None:
+        age_min = (datetime.now() - newest.to_pydatetime().replace(tzinfo=None)).total_seconds() / 60.0
+        if age_min > max_age_min:
+            return None, {}, 0, age_min  # too stale to trust
+
+    # All corridor road tokens we might want to match against.
+    road_tokens = set()
+    for ck in CORRIDORS:
+        for road in CORRIDORS[ck]["roads"]:
+            road_tokens.add(road.upper())
+
+    all_levels = []
+    road_buckets = {r: [] for r in road_tokens}
+    for loc_key, d in state.items():
+        lvl = d.get("level", -1)
+        if lvl is None or lvl < 0:
+            continue  # skip unknown / parse-error cameras
+        all_levels.append(float(lvl))
+        loc_upper = str(loc_key).upper()
+        for token in road_tokens:
+            if token in loc_upper:
+                road_buckets[token].append(float(lvl))
+
+    if not all_levels:
+        return None, {}, 0, age_min
+
+    live_overall = float(np.mean(all_levels))
+    live_road_levels = {r: float(np.mean(v)) for r, v in road_buckets.items() if v}
+    return live_overall, live_road_levels, len(all_levels), age_min
+
+
+def live_blend_weight(window_hour, window_minute, now=None, horizon_min=60.0,
+                      max_weight=0.8):
+    """How much the live camera sweep should count for a given window.
+
+    Full weight (max_weight) for a window happening ~now, decaying linearly to
+    0 by horizon_min into the future. Windows already in the past relative to
+    'now' (you ran the planner late) still get max_weight since live is the
+    best estimate of current conditions. Beyond the horizon → pure historical
+    pattern.
+    """
+    now = now or datetime.now()
+    now_min = now.hour * 60 + now.minute
+    win_min = window_hour * 60 + window_minute
+    delta = win_min - now_min
+    if delta <= 0:
+        return max_weight
+    if delta >= horizon_min:
+        return 0.0
+    return max_weight * (1.0 - delta / horizon_min)
+
+
 def get_ttc_delays():
     """Check current TTC subway delays."""
     delays = {}
@@ -515,12 +598,26 @@ def get_ttc_delays():
 
 def compute_departure_windows(model, feature_cols, test_data, from_loc, to_loc,
                                corridors, distance, start_hour=6, end_hour=10,
-                               interval_min=15, override_dow=None):
-    """Compute optimal departure times across the morning window."""
+                               interval_min=15, override_dow=None,
+                               live_overall=None, live_road_levels=None):
+    """Compute optimal departure times across the morning window.
+
+    If live camera data is supplied (live_overall / live_road_levels), the
+    near-term windows are blended toward what the cameras currently show, with
+    the live weight decaying to zero ~60 min into the future (see
+    live_blend_weight). Later windows fall back to pure historical pattern.
+    Live blending is skipped when simulating a different day-of-week.
+    """
     import xgboost as xgb
 
     now = datetime.now()
     dow = override_dow if override_dow is not None else now.weekday()
+
+    # Only blend live data when planning for *today* — a simulated DOW or a
+    # day other than today should use the historical pattern unmodified.
+    use_live = (live_overall is not None and override_dow is None
+                and dow == now.weekday())
+    live_road_levels = live_road_levels or {}
 
     windows = []
 
@@ -542,15 +639,32 @@ def compute_departure_windows(model, feature_cols, test_data, from_loc, to_loc,
                 model, feature_cols, h_ceil, dow, test_data)
             avg_congestion = cong_floor * (1 - frac) + cong_ceil * frac
 
+            # Blend toward live camera state for near-term windows.
+            w_live = (live_blend_weight(hour, minute, now=now)
+                      if use_live else 0.0)
+            if w_live > 0:
+                avg_congestion = (1 - w_live) * avg_congestion + w_live * live_overall
+
             # Score each corridor
             corridor_results = []
             for corr_key in corridors:
                 corr = CORRIDORS[corr_key]
 
-                # Estimate road-specific congestion
+                # Estimate road-specific congestion (historical pattern)
                 road_levels = predict_road_congestion(
                     model, feature_cols, h_floor, dow, test_data,
                     corr["roads"])
+
+                # Blend each road with its live camera level where available.
+                if w_live > 0 and road_levels:
+                    for rd in list(road_levels.keys()):
+                        live_lvl = next(
+                            (live_road_levels[t] for t in live_road_levels
+                             if t in rd.upper() or rd.upper() in t), None)
+                        if live_lvl is not None:
+                            road_levels[rd] = ((1 - w_live) * road_levels[rd]
+                                               + w_live * live_lvl)
+
                 road_avg = np.mean(list(road_levels.values())) if road_levels else avg_congestion
 
                 drive_time = estimate_drive_time(corr_key, distance, road_avg)
@@ -591,6 +705,7 @@ def compute_departure_windows(model, feature_cols, test_data, from_loc, to_loc,
                 "drive_min": best["drive_min"],
                 "arrival": f"{arrive_h:02d}:{arrive_m:02d}",
                 "all_routes": corridor_results,
+                "live_weight": round(w_live, 2),
             })
 
     return windows
@@ -678,6 +793,9 @@ def format_commute_report(optimal, windows, from_loc, to_loc, distance,
     lines.append(f"  🛣 {optimal['best_route']} ({optimal['best_type']})")
     lines.append(f"  ⏱ {optimal['drive_min']:.0f} min → arrive {optimal['arrival']}")
     lines.append(f"  📊 Congestion: {optimal['avg_congestion']:.1f}/3 — {status}")
+    if optimal.get("live_weight", 0) > 0:
+        lines.append(f"  📷 Live camera data blended ({optimal['live_weight']:.0%}) "
+                     f"— near-term windows reflect current conditions")
     lines.append("")
 
     # Alternative departure times
@@ -940,12 +1058,21 @@ def main():
     # Select relevant corridors
     corridors, distance = select_corridors(from_loc, to_loc)
 
+    # Pull live camera state (if a recent VLM sweep exists) to blend into
+    # near-term departure windows.
+    live_overall, live_road_levels, n_live_cams, live_age = get_live_road_levels()
+    if live_overall is not None:
+        print(f"  Live camera blend: {n_live_cams} cameras, "
+              f"avg level {live_overall:.2f}, {live_age:.0f} min old",
+              file=sys.stderr)
+
     print("Computing departure windows...", file=sys.stderr)
     windows = compute_departure_windows(
         model, feature_cols, test_data,
         from_loc, to_loc, corridors, distance,
         start_hour=start_hour, end_hour=end_hour,
         override_dow=override_dow,
+        live_overall=live_overall, live_road_levels=live_road_levels,
     )
 
     # Find optimal
@@ -992,7 +1119,10 @@ def main():
                 "route": optimal["best_route"],
                 "congestion": optimal["avg_congestion"],
                 "arrival": optimal["arrival"],
+                "live_weight": optimal.get("live_weight", 0),
             },
+            "live_cameras": n_live_cams,
+            "live_avg_level": round(live_overall, 2) if live_overall is not None else None,
             "distance_km": round(distance, 1),
             "timestamp": datetime.now().isoformat(),
         }, f, indent=2, default=str)
