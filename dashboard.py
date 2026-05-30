@@ -689,12 +689,14 @@ with st.sidebar:
     # Project status indicators
     traffic = load_traffic()
     dinesafe = load_dinesafe()
-    housing = load_housing()
+    # Housing/homelessness project retired from the dashboard. Stubbed as
+    # unavailable so every downstream `housing["available"]` guard hides it
+    # without a data load or "not available" error.
+    housing = {"available": False}
 
     st.subheader("Data Sources")
     st.markdown(f"{'🟢' if traffic['available'] else '🔴'} Traffic ({346_154:,} records)")
     st.markdown(f"{'🟢' if dinesafe['available'] else '🔴'} DineSafe")
-    st.markdown(f"{'🟢' if housing['available'] else '🔴'} Housing")
 
     if traffic["available"]:
         vlm_status = "🟢 Live" if traffic.get("vlm") is not None else "⚪ No data"
@@ -1031,7 +1033,6 @@ with tab_overview:
         ("Toronto Open Data", f"{len(events)} events today", True),
         ("Traffic Cameras", f"{len(traffic['cams']) if traffic['available'] else 0} live feeds", traffic["available"]),
         ("Road Restrictions", f"{len(restrictions)} active", True),
-        ("Shelter Occupancy", f"{avg_occ:.0f}% avg" if housing["available"] else "—", housing["available"]),
         ("DineSafe", "risk model" if dinesafe["available"] else "—", dinesafe["available"]),
     ]
     chip_html = "".join(
@@ -2017,7 +2018,7 @@ with tab_nowcast:
 with tab_analytics:
     st.header("📊 Cross-Project Analytics")
     st.caption(
-        "Correlations and patterns across traffic, shelter, and food safety data. "
+        "Correlations and patterns across traffic and food safety data. "
         "Reveals how weather, events, and congestion connect across domains."
     )
 
@@ -2164,39 +2165,6 @@ with tab_analytics:
                 dow_occ.index = dow_occ.index.map(lambda x: dow_names.get(x, x))
                 st.write("**Shelter Occupancy by Day of Week**")
                 st.bar_chart(dow_occ, y_label="Occupancy %")
-
-        st.divider()
-
-        # --- Section 4: Cross-Domain Correlations ---
-        st.subheader("Cross-Domain Correlations")
-
-        if traffic["available"] and housing["available"]:
-            tdf = traffic["test"]
-            hdf = housing["df"]
-
-            # Find shared temporal features
-            shared_time = []
-            for col in ["hour", "day_of_week", "month"]:
-                if col in tdf.columns and col in hdf.columns:
-                    shared_time.append(col)
-
-            if shared_time and "congestion_binary" in tdf.columns and "occ_rate_today" in hdf.columns:
-                st.write("**Traffic Congestion vs Shelter Occupancy**")
-                st.caption(
-                    "Aggregated by shared time features — reveals whether "
-                    "high-congestion periods correlate with shelter demand."
-                )
-
-                for tcol in shared_time:
-                    t_agg = tdf.groupby(tcol)["congestion_binary"].mean().rename("Traffic Congestion")
-                    h_agg = hdf.groupby(tcol)["occ_rate_today"].mean().rename("Shelter Occupancy %")
-                    merged = pd.concat([t_agg, h_agg / 100], axis=1).dropna()
-                    if len(merged) > 2:
-                        corr_val = merged.iloc[:, 0].corr(merged.iloc[:, 1])
-                        st.write(f"**By {tcol}** (correlation: {corr_val:.3f})")
-                        st.line_chart(merged)
-        else:
-            st.info("Need both Traffic and Housing data for cross-domain analysis.")
 
         st.divider()
 
