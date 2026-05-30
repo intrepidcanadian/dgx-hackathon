@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Train shelter occupancy prediction models using XGBoost on GPU."""
+"""Train shelter occupancy prediction models using XGBoost on GPU.
+
+Predicts TOMORROW's occupancy using today's data (no leakage).
+"""
 
 import pandas as pd
 import numpy as np
@@ -21,26 +24,26 @@ feature_cols = [
     "day_of_week", "day_of_month", "month", "is_weekend", "day_of_year",
     "month_sin", "month_cos", "dow_sin", "dow_cos",
     "sector_enc", "program_model_enc",
-    "CAPACITY_ACTUAL_BED",
+    "CAPACITY_ACTUAL_BED", "occ_rate_today", "occupied_today",
+    "spare_beds_today", "unavail_ratio_today",
     "occ_rate_lag_1", "occ_rate_lag_3", "occ_rate_lag_7", "occ_rate_lag_14",
-    "occupied_lag_1", "occupied_lag_3", "occupied_lag_7", "occupied_lag_14",
-    "occ_rate_roll_7", "occ_rate_roll_14", "occ_rate_roll_30",
-    "occ_rate_std_7", "occ_rate_std_14", "occ_rate_std_30",
-    "occ_trend_7d",
-    "spare_beds", "unavail_ratio",
+    "occ_rate_roll_3", "occ_rate_roll_7", "occ_rate_roll_14", "occ_rate_roll_30",
+    "occ_rate_std_3", "occ_rate_std_7", "occ_rate_std_14", "occ_rate_std_30",
+    "occ_trend_3d", "occ_trend_7d", "occ_rate_delta_1d",
+    "at_cap_today", "at_cap_yesterday", "at_cap_rate_7d", "at_cap_rate_30d",
     "program_hist_mean", "program_hist_at_cap_rate",
 ]
 
 X_train = train[feature_cols].values.astype(np.float32)
 X_test = test[feature_cols].values.astype(np.float32)
 
-# ---- Model 1: Classification (will shelter hit 100%?) ----
+# ---- Model 1: Classification (will shelter hit 100% TOMORROW?) ----
 print("=" * 60)
-print("MODEL 1: At-Capacity Classification (XGBoost GPU)")
+print("MODEL 1: Tomorrow At-Capacity Classification (XGBoost GPU)")
 print("=" * 60)
 
-y_train_cls = train["at_capacity"].values.astype(np.float32)
-y_test_cls = test["at_capacity"].values.astype(np.float32)
+y_train_cls = train["target_at_capacity"].values.astype(np.float32)
+y_test_cls = test["target_at_capacity"].values.astype(np.float32)
 
 dtrain_cls = xgb.DMatrix(X_train, label=y_train_cls, feature_names=feature_cols)
 dtest_cls = xgb.DMatrix(X_test, label=y_test_cls, feature_names=feature_cols)
@@ -62,18 +65,20 @@ t0 = time.time()
 clf = xgb.train(
     clf_params,
     dtrain_cls,
-    num_boost_round=300,
+    num_boost_round=500,
     evals=[(dtrain_cls, "train"), (dtest_cls, "test")],
+    early_stopping_rounds=30,
     verbose_eval=50,
 )
 clf_time = time.time() - t0
-print(f"Classifier training time: {clf_time:.1f}s")
+print(f"Classifier training time: {clf_time:.1f}s (best round: {clf.best_iteration})")
 
 y_prob_cls = clf.predict(dtest_cls)
 y_pred_cls = (y_prob_cls >= 0.5).astype(int)
 
-print(f"\nClassification Report (test set):")
-print(classification_report(y_test_cls.astype(int), y_pred_cls, target_names=["Below 100%", "At/Over 100%"]))
+print(f"\nClassification Report (test set — predicting TOMORROW):")
+print(classification_report(y_test_cls.astype(int), y_pred_cls,
+                            target_names=["Below 100%", "At/Over 100%"]))
 print(f"ROC AUC: {roc_auc_score(y_test_cls, y_prob_cls):.4f}")
 
 print(f"\nTop 15 features (classification):")
@@ -83,13 +88,13 @@ for name, score in imp_sorted[:15]:
     bar = "#" * int(score / max(imp.values()) * 40)
     print(f"  {name:30s} {score:10.1f} {bar}")
 
-# ---- Model 2: Regression (predict occupancy rate) ----
+# ---- Model 2: Regression (predict tomorrow's occupancy rate) ----
 print("\n" + "=" * 60)
-print("MODEL 2: Occupancy Rate Regression (XGBoost GPU)")
+print("MODEL 2: Tomorrow Occupancy Rate Regression (XGBoost GPU)")
 print("=" * 60)
 
-y_train_reg = train["OCCUPANCY_RATE_BEDS"].values.astype(np.float32)
-y_test_reg = test["OCCUPANCY_RATE_BEDS"].values.astype(np.float32)
+y_train_reg = train["target_occ_rate"].values.astype(np.float32)
+y_test_reg = test["target_occ_rate"].values.astype(np.float32)
 
 dtrain_reg = xgb.DMatrix(X_train, label=y_train_reg, feature_names=feature_cols)
 dtest_reg = xgb.DMatrix(X_test, label=y_test_reg, feature_names=feature_cols)
@@ -111,12 +116,13 @@ t0 = time.time()
 reg = xgb.train(
     reg_params,
     dtrain_reg,
-    num_boost_round=300,
+    num_boost_round=500,
     evals=[(dtrain_reg, "train"), (dtest_reg, "test")],
+    early_stopping_rounds=30,
     verbose_eval=50,
 )
 reg_time = time.time() - t0
-print(f"Regressor training time: {reg_time:.1f}s")
+print(f"Regressor training time: {reg_time:.1f}s (best round: {reg.best_iteration})")
 
 y_pred_reg = reg.predict(dtest_reg)
 
@@ -144,11 +150,11 @@ for name, score in imp_r_sorted[:15]:
 # ---- Save models ----
 clf.save_model(str(MODEL_DIR / "classifier.json"))
 reg.save_model(str(MODEL_DIR / "regressor.json"))
-print(f"\nModels saved to {MODEL_DIR}/ (XGBoost JSON format)")
+print(f"\nModels saved to {MODEL_DIR}/")
 
 # ---- Sample predictions ----
 print("\n" + "=" * 60)
-print("SAMPLE PREDICTIONS (test set, first day)")
+print("SAMPLE PREDICTIONS (predicting tomorrow from today's data)")
 print("=" * 60)
 
 first_date = test["OCCUPANCY_DATE"].min()
@@ -159,18 +165,22 @@ day_data["pred_prob"] = clf.predict(X_day)
 day_data["pred_at_capacity"] = (day_data["pred_prob"] >= 0.5).astype(int)
 day_data["pred_occ_rate"] = reg.predict(X_day)
 
-print(f"\nDate: {first_date.date()}")
-print(f"Programs reporting: {len(day_data)}")
-print(f"Predicted at capacity: {day_data['pred_at_capacity'].sum()} / {len(day_data)}")
-print(f"Actual at capacity:    {day_data['at_capacity'].sum()} / {len(day_data)}")
+tomorrow = day_data["tomorrow"].iloc[0]
+print(f"\nUsing data from: {first_date.date()}")
+print(f"Predicting for:  {tomorrow.date()}")
+print(f"Programs: {len(day_data)}")
+print(f"Predicted at capacity tomorrow: {day_data['pred_at_capacity'].sum()} / {len(day_data)}")
+print(f"Actual at capacity tomorrow:    {int(day_data['target_at_capacity'].sum())} / {len(day_data)}")
 
 cols = ["SHELTER_GROUP", "LOCATION_NAME", "SECTOR", "CAPACITY_ACTUAL_BED",
-        "OCCUPANCY_RATE_BEDS", "pred_occ_rate", "pred_prob", "at_capacity", "pred_at_capacity"]
-print(f"\nShelters with available beds (predicted):")
+        "occ_rate_today", "target_occ_rate", "pred_occ_rate", "pred_prob",
+        "target_at_capacity", "pred_at_capacity"]
+
+print(f"\nShelters predicted to have beds available tomorrow:")
 available = day_data[day_data["pred_at_capacity"] == 0].sort_values("pred_occ_rate")
 print(available[cols].head(15).to_string(index=False))
 
-print(f"\nShelters predicted at capacity (highest confidence):")
+print(f"\nShelters predicted at capacity tomorrow (highest confidence):")
 full = day_data[day_data["pred_at_capacity"] == 1].sort_values("pred_prob", ascending=False)
 print(full[cols].head(15).to_string(index=False))
 
