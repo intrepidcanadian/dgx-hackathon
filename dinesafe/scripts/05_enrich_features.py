@@ -53,7 +53,7 @@ for year in [2023, 2024, 2025, 2026]:
             for csv_name in csv_names:
                 df = pd.read_csv(zf.open(csv_name), encoding="latin-1",
                                  on_bad_lines="skip", engine="python",
-                                 low_memory=False)
+                                )
                 sr_dfs.append(df)
                 print(f"  {year}: {len(df):,} records from {csv_name}")
     except Exception as e:
@@ -139,7 +139,7 @@ print(f"{'='*60}")
 fire_path = RAW_DIR / "fire_incidents.csv"
 if fire_path.exists():
     fire = pd.read_csv(fire_path, encoding="latin-1", on_bad_lines="skip",
-                       engine="python", low_memory=False)
+                       engine="python")
     print(f"Fire incidents: {len(fire):,}")
 
     fire_date_col = None
