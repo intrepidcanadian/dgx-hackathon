@@ -879,7 +879,7 @@ test_out["pred_severity"] = y_pred_sev
 save_cols = ["est_id", "inspection_id", "inspection_date", "est_name",
              "address", "latitude", "longitude", "est_type_clean",
              "pred_risk", "pred_severity", "target", "target_binary",
-             "status", "severity_score", "fail"]
+             "status", "severity_score", "fail"] + enrichment
 save_cols = [c for c in save_cols if c in test_out.columns]
 for col in ["inspection_id", "est_id"]:
     if col in test_out.columns:
