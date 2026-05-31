@@ -1,0 +1,47 @@
+[
+  {
+    "camera_id": 8001,
+    "location": "YORK ST & BREMNER BLVD / RAPTORS WAY",
+    "image_url": "https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8001.jpg",
+    "latitude": 43.6431200069527,
+    "longitude": -79.3813860009273,
+    "image_size_kb": 173,
+    "timestamp": "2026-05-30T09:30:52.122521"
+  },
+  {
+    "camera_id": 8002,
+    "location": "LOWER SIMCOE ST & BREMNER BLVD",
+    "image_url": "https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8002.jpg",
+    "latitude": 43.6422200016549,
+    "longitude": -79.3840680012892,
+    "image_size_kb": 158,
+    "timestamp": "2026-05-30T09:30:52.122521"
+  },
+  {
+    "camera_id": 8003,
+    "location": "JARVIS ST & FRONT ST E / LOWER JARVIS ST",
+    "image_url": "https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8003.jpg",
+    "latitude": 43.6494610001075,
+    "longitude": -79.3712669943727,
+    "image_size_kb": 159,
+    "timestamp": "2026-05-30T09:30:52.122521"
+  },
+  {
+    "camera_id": 8004,
+    "location": "UNIVERSITY AVE & FRONT ST W / YORK ST",
+    "image_url": "https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8004.jpg",
+    "latitude": 43.6451529957272,
+    "longitude": -79.3825739992347,
+    "image_size_kb": 114,
+    "timestamp": "2026-05-30T09:30:52.122521"
+  },
+  {
+    "camera_id": 8005,
+    "location": "FRONT ST W & SIMCOE ST / LOWER SIMCOE ST",
+    "image_url": "https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8005.jpg",
+    "latitude": 43.6446850095358,
+    "longitude": -79.3848610027037,
+    "image_size_kb": 131,
+    "timestamp": "2026-05-30T09:30:52.122521"
+  }
+]

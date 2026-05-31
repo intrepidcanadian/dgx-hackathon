@@ -1,0 +1,76 @@
+{
+  "model": "STGNN",
+  "device": "cpu",
+  "timestamp": "2026-05-30T15:58:17.448037",
+  "n_nodes": 200,
+  "current_week_hour": 135,
+  "current_avg": 1.743,
+  "current_label": "Moderate",
+  "trend": "STABLE",
+  "horizons": [
+    {
+      "offset_min": 0,
+      "avg": 1.743,
+      "label": "Moderate",
+      "distribution": {
+        "Free Flow": 0.0,
+        "Light": 0.61,
+        "Moderate": 0.215,
+        "Heavy": 0.175
+      }
+    },
+    {
+      "offset_min": 60,
+      "avg": 1.805,
+      "label": "Moderate",
+      "distribution": {
+        "Free Flow": 0.0,
+        "Light": 0.045,
+        "Moderate": 0.955,
+        "Heavy": 0.0
+      }
+    },
+    {
+      "offset_min": 120,
+      "avg": 1.999,
+      "label": "Moderate",
+      "distribution": {
+        "Free Flow": 0.0,
+        "Light": 0.0,
+        "Moderate": 1.0,
+        "Heavy": 0.0
+      }
+    },
+    {
+      "offset_min": 180,
+      "avg": 1.881,
+      "label": "Moderate",
+      "distribution": {
+        "Free Flow": 0.0,
+        "Light": 0.0,
+        "Moderate": 1.0,
+        "Heavy": 0.0
+      }
+    },
+    {
+      "offset_min": 240,
+      "avg": 1.78,
+      "label": "Moderate",
+      "distribution": {
+        "Free Flow": 0.0,
+        "Light": 0.0,
+        "Moderate": 1.0,
+        "Heavy": 0.0
+      }
+    }
+  ],
+  "predicted_avg": 1.805,
+  "predicted_label": "Moderate",
+  "distribution": {
+    "Free Flow": 0.0,
+    "Light": 0.045,
+    "Moderate": 0.955,
+    "Heavy": 0.0
+  },
+  "cameras_observed": 200
+}

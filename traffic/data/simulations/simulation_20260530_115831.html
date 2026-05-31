@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_e7f2c7cdb108e93e101127ef8243381d {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+            <div class="folium-map" id="map_e7f2c7cdb108e93e101127ef8243381d" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_e7f2c7cdb108e93e101127ef8243381d = L.map(
+                "map_e7f2c7cdb108e93e101127ef8243381d",
+                {
+                    center: [43.6435, -79.3791],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 12,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_4fe69da3964ba4140e9aaed4e521b20e = L.tileLayer(
+                "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 20,
+  "maxNativeZoom": 20,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors \u0026copy; \u003ca href=\"https://carto.com/attributions\"\u003eCARTO\u003c/a\u003e",
+  "subdomains": "abcd",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_4fe69da3964ba4140e9aaed4e521b20e.addTo(map_e7f2c7cdb108e93e101127ef8243381d);
+        
+    
+            var marker_9f05a18c778ab03822e9aa5badd99fe9 = L.marker(
+                [43.6435, -79.3791],
+                {
+}
+            ).addTo(map_e7f2c7cdb108e93e101127ef8243381d);
+        
+    
+            var icon_390f322ef1069a353248a3a8bc01cab4 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "star",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_82847f415d200a53a457b25ae03b4f49 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_d1b16df24747067890eac7db215f70e1 = $(`<div id="html_d1b16df24747067890eac7db215f70e1" style="width: 100.0%; height: 100.0%;"><b>Sports Game at scotiabank arena</b><br>Type: sports_game<br>Crowd: 20,000<br>Time: ?</div>`)[0];
+                popup_82847f415d200a53a457b25ae03b4f49.setContent(html_d1b16df24747067890eac7db215f70e1);
+            
+        
+
+        marker_9f05a18c778ab03822e9aa5badd99fe9.bindPopup(popup_82847f415d200a53a457b25ae03b4f49)
+        ;
+
+        
+    
+    
+                marker_9f05a18c778ab03822e9aa5badd99fe9.setIcon(icon_390f322ef1069a353248a3a8bc01cab4);
+            
+    
+            var circle_3221a2ffbc9b4eca66c3cd08213beb59 = L.circle(
+                [43.6435, -79.3791],
+                {"bubblingMouseEvents": true, "color": "red", "dashArray": "5", "dashOffset": null, "fill": false, "fillColor": "red", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 2500.0, "stroke": true, "weight": 3}
+            ).addTo(map_e7f2c7cdb108e93e101127ef8243381d);
+        
+    
+        var popup_b0701bbd0bd4dadeab3ea90cf7ab9419 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_47cb1f51c456811a75104f5cb9a73b40 = $(`<div id="html_47cb1f51c456811a75104f5cb9a73b40" style="width: 100.0%; height: 100.0%;">Peak impact zone</div>`)[0];
+                popup_b0701bbd0bd4dadeab3ea90cf7ab9419.setContent(html_47cb1f51c456811a75104f5cb9a73b40);
+            
+        
+
+        circle_3221a2ffbc9b4eca66c3cd08213beb59.bindPopup(popup_b0701bbd0bd4dadeab3ea90cf7ab9419)
+        ;
+
+        
+    
+    
+            var circle_9c61ae2ece55f58e8b39f55b16b7d77c = L.circle(
+                [43.6435, -79.3791],
+                {"bubblingMouseEvents": true, "color": "orange", "dashArray": "10", "dashOffset": null, "fill": false, "fillColor": "orange", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 6000.0, "stroke": true, "weight": 3}
+            ).addTo(map_e7f2c7cdb108e93e101127ef8243381d);
+        
+    
+        var popup_85e977496890d9f2736ff72c35f5a502 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_981850e9984b0befc3fcdd7e8a52f3ec = $(`<div id="html_981850e9984b0befc3fcdd7e8a52f3ec" style="width: 100.0%; height: 100.0%;">Extended impact zone</div>`)[0];
+                popup_85e977496890d9f2736ff72c35f5a502.setContent(html_981850e9984b0befc3fcdd7e8a52f3ec);
+            
+        
+
+        circle_9c61ae2ece55f58e8b39f55b16b7d77c.bindPopup(popup_85e977496890d9f2736ff72c35f5a502)
+        ;
+
+        
+    
+</script>
+</html>

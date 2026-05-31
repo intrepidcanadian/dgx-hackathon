@@ -1,0 +1,24 @@
+{
+  "from": {
+    "lat": 43.638,
+    "lon": -79.4195,
+    "desc": "Liberty Village"
+  },
+  "to": {
+    "lat": 43.7615,
+    "lon": -79.4111,
+    "desc": "North York Centre"
+  },
+  "optimal": {
+    "departure": "06:00",
+    "drive_min": 66.0,
+    "route": "DVP / Don Valley Parkway",
+    "congestion": 2.1,
+    "arrival": "07:06",
+    "live_weight": 0.8
+  },
+  "live_cameras": 8,
+  "live_avg_level": 2.62,
+  "distance_km": 13.7,
+  "timestamp": "2026-05-30T16:42:37.283767"
+}

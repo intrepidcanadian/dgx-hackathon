@@ -1,0 +1,337 @@
+REC_ID,MAINROAD,CROSSROAD,latitude,longitude,IMAGEURL
+8001,YORK ST,BREMNER BLVD / RAPTORS WAY,43.6431200069527,-79.3813860009273,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8001.jpg
+8002,LOWER SIMCOE ST,BREMNER BLVD,43.6422200016549,-79.3840680012892,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8002.jpg
+8003,JARVIS ST,FRONT ST E / LOWER JARVIS ST,43.6494610001075,-79.3712669943727,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8003.jpg
+8004,UNIVERSITY AVE,FRONT ST W / YORK ST,43.6451529957272,-79.3825739992347,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8004.jpg
+8005,FRONT ST W,SIMCOE ST / LOWER SIMCOE ST,43.6446850095358,-79.3848610027037,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8005.jpg
+8006,FRONT ST W,JOHN ST / PRIVATE ACCESS,43.6438570011493,-79.3888450031211,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8006.jpg
+8007,SPADINA AVE,FRONT ST W,43.6427400100944,-79.3935820060818,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8007.jpg
+8008,BATHURST ST,FRONT ST W,43.6408870010502,-79.4013240045522,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8008.jpg
+8009,JARVIS ST,KING ST E,43.6503339946227,-79.371946009712,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8009.jpg
+8010,KING ST E,PARLIAMENT ST,43.6529050006026,-79.3631910065289,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8010.jpg
+8011,ADELAIDE ST E,PARLIAMENT ST,43.6534890014317,-79.36344100899,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8011.jpg
+8012,ADELAIDE ST E,CHURCH ST,43.6512640074972,-79.3748159966986,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8012.jpg
+8013,BAY ST,ADELAIDE ST W,43.6500350042574,-79.3807319914649,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8013.jpg
+8014,UNIVERSITY AVE,ADELAIDE ST W,43.6489809958318,-79.385330003244,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8014.jpg
+8015,ADELAIDE ST W,SIMCOE ST,43.6486069967868,-79.3864830020457,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8015.jpg
+8016,RICHMOND ST E,PARLIAMENT ST,43.6546980034625,-79.3639570029156,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8016.jpg
+8017,RICHMOND ST E,CHURCH ST,43.6525400046123,-79.3753520080616,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8017.jpg
+8018,BAY ST,RICHMOND ST W,43.6511680028268,-79.3814130065462,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8018.jpg
+8019,UNIVERSITY AVE,RICHMOND ST W,43.6499149985531,-79.3865059885484,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8019.jpg
+8020,SPADINA AVE,RICHMOND ST W,43.6477429966399,-79.3961449982607,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8020.jpg
+8021,UNIVERSITY AVE,QUEEN ST W,43.6508269972901,-79.3869500048448,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8021.jpg
+8022,UNIVERSITY AVE,QUEEN ST W,43.6507850045542,-79.3862679961158,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8022.jpg
+8023,THE QUEENSWAY,COLBORNE LODGE DR,43.6396249995224,-79.4598789931166,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8023.jpg
+8024,THE QUEENSWAY,KING ST W / RONCESVALLES AVE,43.6387200010102,-79.4458620072651,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8024.jpg
+8025,THE QUEENSWAY,KING ST W / RONCESVALLES AVE,43.6385540031668,-79.4461979997267,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8025.jpg
+8026,THE QUEENSWAY,ELLIS AVE,43.6379810034202,-79.4665279934133,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8026.jpg
+8027,THE QUEENSWAY,WINDERMERE AVE,43.6373549995219,-79.4702619948212,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8027.jpg
+8028,THE QUEENSWAY,ISLINGTON AVE,43.6236920059756,-79.5150609922626,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8028.jpg
+8030,KIPLING AVE,THE QUEENSWAY,43.6210459999958,-79.5270669946805,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8030.jpg
+8031,JARVIS ST,DUNDAS ST E,43.6569310034762,-79.3746310010372,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8031.jpg
+8032,YONGE ST,DUNDAS ST,43.656237999307,-79.381032993917,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8032.jpg
+8033,UNIVERSITY AVE,DUNDAS ST,43.6546940019772,-79.3879779987806,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8033.jpg
+8034,JARVIS ST,CARLTON ST,43.6623110016255,-79.3768519988754,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8034.jpg
+8035,CARLTON ST,CHURCH ST,43.661980995765,-79.3792239946116,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8035.jpg
+8036,YONGE ST,COLLEGE ST / CARLTON ST,43.6614319964405,-79.3832719964188,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8036.jpg
+8037,BAY ST,COLLEGE ST,43.6609200061728,-79.3856920028719,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8037.jpg
+8038,UNIVERSITY AVE,COLLEGE ST,43.6596820070307,-79.3906429994984,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8038.jpg
+8039,COLLEGE ST,ST GEORGE ST / BEVERLEY ST,43.6588019966228,-79.3958350008438,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8039.jpg
+8040,BLOOR ST W,CASTLE FRANK RD,43.673872002157,-79.3678130015072,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8040.jpg
+8041,BLOOR ST E,TED ROGERS WAY,43.6716840009141,-79.380498997595,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8041.jpg
+8042,YONGE ST,BLOOR ST,43.6703179994192,-79.3866269973482,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8042.jpg
+8043,BAY ST,BLOOR ST W,43.6698140049965,-79.3896430028517,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8043.jpg
+8044,BAY ST,BLOOR ST W,43.6697550016318,-79.3896899973845,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8044.jpg
+8045,AVENUE RD,BLOOR ST W,43.6685390051661,-79.3942160097075,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8045.jpg
+8046,SPADINA AVE,BLOOR ST W,43.6665080027107,-79.4038409932634,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8046.jpg
+8047,BATHURST ST,BLOOR ST W,43.6652230016024,-79.4110829991932,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8047.jpg
+8048,BATHURST ST,BLOOR ST W,43.6652490057816,-79.4111399990104,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8048.jpg
+8049,DUFFERIN ST,BLOOR ST W,43.6598799965626,-79.4355479996379,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8049.jpg
+8050,DUFFERIN ST,BLOOR ST W,43.6597160035126,-79.4353770017794,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8050.jpg
+8051,JANE ST,BLOOR ST W,43.6493660069066,-79.4846289952344,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8051.jpg
+8052,ISLINGTON AVE,BLOOR ST W,43.6448790001407,-79.5233280045658,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8052.jpg
+8053,ISLINGTON AVE,BLOOR ST W,43.6446100045888,-79.5231440028625,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8053.jpg
+8054,EGLINTON AVE E,KENNEDY RD,43.7324710045906,-79.2678819948369,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8054.jpg
+8055,EGLINTON AVE E,BIRCHMOUNT RD,43.7302420003532,-79.277795002138,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8055.jpg
+8056,EGLINTON AVE E,WARDEN AVE,43.7280860005301,-79.2875389999037,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8056.jpg
+8057,EGLINTON AVE E,VICTORIA PARK AVE,43.7244920033997,-79.3024439978437,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8057.jpg
+8058,EGLINTON AVE E,SWIFT DR / CREDIT UNION DR,43.7260280018744,-79.3180430035379,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8058.jpg
+8059,EGLINTON AVE E,DON MILLS RD,43.7208109976411,-79.3387390066082,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8059.jpg
+8060,EGLINTON AVE E,LESLIE ST,43.7170209981414,-79.3498500032005,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8060.jpg
+8061,EGLINTON AVE E,LAIRD DR,43.7134040022021,-79.3645460003598,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8061.jpg
+8062,EGLINTON AVE E,BAYVIEW AVE,43.7109130071588,-79.3772879910129,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8062.jpg
+8063,EGLINTON AVE,YONGE ST,43.7068919955001,-79.398213000935,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8063.jpg
+8064,EGLINTON AVE W,AVENUE RD,43.7046659985769,-79.4087110022009,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8064.jpg
+8065,EGLINTON AVE W,BATHURST ST,43.7009480055114,-79.4253439972009,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8065.jpg
+8066,EGLINTON AVE W,CALEDONIA RD,43.6930680060188,-79.4624080003997,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8066.jpg
+8067,EGLINTON AVE W,KEELE ST / TRETHEWEY DR,43.6900060022174,-79.4752209994858,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8067.jpg
+8068,EGLINTON AVE W,BLACK CREEK DR,43.6885440034765,-79.4831350052679,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8068.jpg
+8069,EGLINTON AVE W,JANE ST,43.6842040033526,-79.4989159949939,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8069.jpg
+8070,EGLINTON AVE W,DUFFERIN ST,43.6958050008943,-79.4502279981644,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8070.jpg
+8071,MORNINGSIDE AVE,MILITARY TRL,43.7894189950797,-79.1942110001791,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8071.jpg
+8072,SHOREHAM DR,MURRAY ROSS PKWY / PRIVATE ACCESS,43.7719060064778,-79.5139339934346,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8072.jpg
+8073,MORNINGSIDE AVE,401 C E MORNINGSIDE AVE S RAMP,43.7949909985672,-79.1967299997816,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8073.jpg
+8074,MARKHAM RD,401 C E MARKHAM RD N RAMP,43.783978004121,-79.234555998716,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8074.jpg
+8075,SHEPPARD AVE E,MARKHAM RD,43.7937290047327,-79.2384229993136,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8075.jpg
+8076,MCCOWAN RD,401 C E MCCOWAN RD RAMP / CONSILIUM PL,43.7796570024561,-79.2544679999271,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8076.jpg
+8077,SHEPPARD AVE E,MCCOWAN RD,43.7896790003277,-79.2591450120824,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8077.jpg
+8078,KENNEDY RD,ELLESMERE RD,43.766104005034,-79.2809629978933,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8078.jpg
+8079,KENNEDY RD,401 C E KENNEDY RD RAMP / WILLIAM KITCHEN RD,43.7734519937101,-79.2836619890225,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8079.jpg
+8080,SHEPPARD AVE E,KENNEDY RD,43.7830319998714,-79.2883560033881,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8080.jpg
+8081,WARDEN AVE,ELLESMERE RD,43.7609590035503,-79.3009649950828,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8081.jpg
+8082,SHEPPARD AVE E,WARDEN AVE,43.7786230021431,-79.3076219920703,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8082.jpg
+8083,VICTORIA PARK AVE,LAWRENCE AVE E,43.7423389963657,-79.309694999576,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8083.jpg
+8084,VICTORIA PARK AVE,PARKWOODS VILLAGE DR / ELLESMERE RD,43.7576990053109,-79.315195998326,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8084.jpg
+8085,SHEPPARD AVE E,VICTORIA PARK AVE,43.7751900035335,-79.3226929999082,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8085.jpg
+8086,VICTORIA PARK AVE,FINCH AVE E,43.7930610055449,-79.3310820007673,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8086.jpg
+8087,VICTORIA PARK AVE,STEELES AVE E,43.8155800065479,-79.3410529961985,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8087.jpg
+8088,DON MILLS RD,OVERLEA BLVD / GATEWAY BLVD,43.709128998068,-79.3334619967655,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8088.jpg
+8089,DON MILLS RD,O CONNOR DR,43.6956280022827,-79.3398250039533,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8089.jpg
+8090,DON MILLS RD,LAWRENCE AVE E,43.7372380052751,-79.3437260092066,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8090.jpg
+8091,DON MILLS RD,YORK MILLS RD,43.7559609952673,-79.347275998448,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8091.jpg
+8092,SHEPPARD AVE E,DON MILLS RD,43.7750169993647,-79.3467159979611,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8092.jpg
+8093,DON MILLS RD,FINCH AVE E,43.792762001731,-79.3550520097319,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8093.jpg
+8094,DON MILLS RD,STEELES AVE E,43.8112600069211,-79.3610460006792,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8094.jpg
+8095,STEELES AVE E,WOODBINE AVE,43.8137039955886,-79.3488000114673,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8095.jpg
+8096,LESLIE ST,YORK MILLS RD,43.7531449989851,-79.360198007398,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8096.jpg
+8097,LESLIE ST,401 C E LESLIE ST RAMP / LESMILL RD,43.7639420028642,-79.3615929909876,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8097.jpg
+8098,SHEPPARD AVE E,LESLIE ST,43.7719200032638,-79.3639080084236,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8098.jpg
+8099,BAYVIEW AVE,POTTERY RD / PRIVATE ACCESS,43.6831840090544,-79.3658519985922,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8099.jpg
+8100,BAYVIEW AVE,ROSEDALE VALLEY RD,43.6703370023874,-79.3601799971434,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8100.jpg
+8101,BAYVIEW AVE,POTTERY RD,43.6881609987039,-79.3635229974919,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8101.jpg
+8102,SHEPPARD AVE E,BAYVIEW AVE,43.7665330068348,-79.3877150011279,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8102.jpg
+8103,YONGE ST,LORD SEATON W YONGE RAMP,43.752454995724,-79.4078109962249,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8103.jpg
+8104,SHEPPARD AVE,YONGE ST,43.7612890079355,-79.4110470003991,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8104.jpg
+8105,BATHURST ST,FORT YORK BLVD,43.6388950079082,-79.4008070060979,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8105.jpg
+8106,SHEPPARD AVE W,BATHURST ST,43.75563800789,-79.4383290068312,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8106.jpg
+8107,DUFFERIN ST,FINCH AVE W,43.7689069954514,-79.4671819964424,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8107.jpg
+8108,KEELE ST,ST CLAIR AVE W,43.6724620027878,-79.4674010077901,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8108.jpg
+8109,KEELE ST,STEELES AVE W,43.7814840033928,-79.494116999982,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8109.jpg
+8110,BLACK CREEK DR,LAWRENCE AVE W,43.7047710007162,-79.4941649937678,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8110.jpg
+8111,RATHBURN RD,THE WEST MALL,43.6529010078677,-79.5722609993288,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8111.jpg
+8112,RATHBURN RD,RENFORTH DR,43.6513690030528,-79.5792050011891,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8112.jpg
+8113,BAY ST,QUEEN ST W,43.6519740075906,-79.3816090020626,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8113.jpg
+8114,BAY ST,QUEEN ST W,43.651957002608,-79.382304995923,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8114.jpg
+8115,QUEENS QUAY W,BAY ST / HARBOUR SQ,43.641064998551,-79.3768619992521,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8115.jpg
+8116,BLOOR ST W,KEELE ST / PARKSIDE DR,43.6547530021496,-79.4602409951327,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8116.jpg
+8117,BLOOR ST W,KEELE ST / PARKSIDE DR,43.6545739976846,-79.4598189937303,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8117.jpg
+8118,STEELES AVE W,DUFFERIN ST,43.787509006058,-79.4699609892263,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8118.jpg
+8119,DUNDAS ST W,THE WEST MALL,43.6281209973391,-79.5594900029658,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8119.jpg
+8120,ELLESMERE RD,BIRCHMOUNT RD,43.7632260008421,-79.2915649999591,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8120.jpg
+8121,MCCOWAN RD,ELLESMERE RD,43.771928005528,-79.2516109988249,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8121.jpg
+8122,MARKHAM RD,ELLESMERE RD,43.7764070076806,-79.2314420031863,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8122.jpg
+8123,BROWNS LINE,EVANS BROWNS LN RAMP,43.6091070005587,-79.5484940050549,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8123.jpg
+8124,KIPLING AVE,EVANS AVE,43.6160960061787,-79.5245580058068,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8124.jpg
+8125,KEELE ST,FLORAL PKWY / 401 C E KEELE ST RAMP,43.7214200027604,-79.4809789980109,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8125.jpg
+8126,BAYVIEW AVE,401 C E BAYVIEW RAMP,43.7619370022874,-79.3867279956159,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8126.jpg
+8127,VICTORIA PARK AVE,401 C E VICTORIA PR RAMP,43.7669629980857,-79.3194100080628,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8127.jpg
+8128,KEELE ST,SHEPPARD AVE W,43.7447330060769,-79.4861479988486,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8128.jpg
+8129,KEELE ST,WILSON AVE,43.7266450111262,-79.4817630039992,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8129.jpg
+8130,DUNDAS ST W,KEELE ST,43.6653520055123,-79.4646509968386,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8130.jpg
+8131,KING ST W,JAMESON AVE,43.6371379936031,-79.4358309964034,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8131.jpg
+8132,KING ST W,DUFFERIN ST,43.6389119994195,-79.4271710096162,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8132.jpg
+8133,KING ST W,STRACHAN AVE,43.6421910016468,-79.4119000078303,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8133.jpg
+8134,KING ST W,STRACHAN AVE,43.6419490057919,-79.4120949972405,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8134.jpg
+8135,KING ST W,BATHURST ST,43.6440469982846,-79.402860999446,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8135.jpg
+8136,KING ST W,BATHURST ST,43.6439290054442,-79.4029530009815,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8136.jpg
+8137,SPADINA AVE,KING ST W,43.6453609951093,-79.395231003285,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8137.jpg
+8138,SPADINA AVE,KING ST W,43.6453960063821,-79.3947659987253,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8138.jpg
+8139,O CONNOR DR,WOODBINE AVE,43.6999420062013,-79.3191310017128,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8139.jpg
+8140,O CONNOR DR,ST CLAIR AVE E,43.7055150016748,-79.312571000791,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8140.jpg
+8141,QUEEN ST W,LANSDOWNE AVE / JAMESON AVE,43.6405150072128,-79.4373439960441,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8141.jpg
+8142,QUEEN ST W,DUFFERIN ST,43.6421420052866,-79.428794998704,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8142.jpg
+8143,QUEEN ST W,DUFFERIN ST,43.6420979991384,-79.4286819972819,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8143.jpg
+8144,QUEEN ST W,STRACHAN AVE,43.6454130088093,-79.4131499993241,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8144.jpg
+8145,BATHURST ST,QUEEN ST W,43.647310005401,-79.4041109891262,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8145.jpg
+8146,SPADINA AVE,QUEEN ST W,43.6488800043283,-79.3961950042573,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8146.jpg
+8147,UNIVERSITY AVE,KING ST W,43.647555002179,-79.3849740014843,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8147.jpg
+8148,UNIVERSITY AVE,KING ST W,43.6475249990991,-79.3848919974713,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8148.jpg
+8149,WILSON AVE,JANE ST,43.7207070016282,-79.5087459984177,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8149.jpg
+8150,WILSON AVE,DUFFERIN ST,43.7321970018384,-79.4590859980371,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8150.jpg
+8151,BATHURST ST,WILSON AVE,43.737227006117,-79.4341489903637,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8151.jpg
+8152,AVENUE RD,WILSON AVE,43.7400770008769,-79.421493003537,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8152.jpg
+8153,AVENUE RD,WILSON AVE,43.7397290023607,-79.4218310088276,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8153.jpg
+8154,YONGE ST,YORK MILLS RD / WILSON AVE,43.7443310020954,-79.4064699922825,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8154.jpg
+8155,BAYVIEW AVE,YORK MILLS RD,43.7482450084092,-79.3839669962013,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8155.jpg
+8156,KINGSTON RD,LAWRENCE AVE E,43.767875006471,-79.1891560041745,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8156.jpg
+8157,KINGSTON RD,401 C E 2A W RAMP,43.794880001778,-79.1527880002371,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8157.jpg
+8158,WARDEN AVE,401 C W WARDEN AV RAMP,43.7716120023711,-79.3044690067384,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8158.jpg
+8159,MOUNT PLEASANT RD,ST CLAIR AVE E,43.6904950075455,-79.383236003103,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8159.jpg
+8160,MOUNT PLEASANT RD,LAWRENCE AVE E,43.7262290020609,-79.3972519941648,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8160.jpg
+8161,YONGE ST,ST CLAIR AVE,43.6880380004903,-79.3939359940352,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8161.jpg
+8162,YONGE ST,FINCH AVE,43.7795570031574,-79.415668002497,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8162.jpg
+8163,YONGE ST,STEELES AVE,43.7978530042256,-79.420168000608,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8163.jpg
+8164,SPADINA AVE,BREMNER BLVD / FORT YORK BLVD,43.6407730046315,-79.3928419894539,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8164.jpg
+8165,SPADINA AVE,DUNDAS ST W,43.6529310032037,-79.3977529964177,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8165.jpg
+8166,SPADINA AVE,COLLEGE ST,43.6580510041919,-79.3998939953296,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8166.jpg
+8167,BATHURST ST,GLENCAIRN AVE,43.7124650016852,-79.4279589930438,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8167.jpg
+8168,BATHURST ST,LAWRENCE AVE W,43.7193899988087,-79.4299230033164,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8168.jpg
+8169,PARK LAWN RD,GARDINER E PARK LAWN RD RAMP,43.6256519951851,-79.4860500082425,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8169.jpg
+8170,JANE ST,400 S JANE ST RAMP / JANE ST BLACK CR S RAMP,43.7109910089439,-79.5057489945701,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8170.jpg
+8171,WESTON RD,401 C W WESTON RD RAMP,43.7150219997975,-79.5364880010728,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8171.jpg
+8172,ISLINGTON AVE,401 C W ISLINGTON N RAMP / ALLENBY AVE,43.7113400014744,-79.5535119934489,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8172.jpg
+8174,HIGHWAY 27,BELFIELD RD,43.6994399987515,-79.5869850044948,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8174.jpg
+8175,STRACHAN AVE,FLEET ST / MANITOBA DR,43.636412004782,-79.4095549910697,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8175.jpg
+8176,EASTERN AVE,CARLAW AVE,43.6585260000707,-79.3389260048634,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8176.jpg
+8177,THE QUEENSWAY,PARK LAWN RD,43.6292290039945,-79.4902869919342,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8177.jpg
+8178,THE QUEENSWAY,ROYAL YORK RD,43.6263900067065,-79.5028789943969,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8178.jpg
+8179,THE QUEENSWAY,427 C S QUEENSWAY RAMP / SHERWAY GARDENS RD,43.6152000006988,-79.5527800060276,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8179.jpg
+8180,DUNDAS ST W,CLOVERDALE MALL / 427 C N DUNDAS RAMP,43.6289439959311,-79.5547500019616,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8180.jpg
+8181,COLLEGE ST,DUFFERIN ST,43.6525900003544,-79.4327059977383,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8181.jpg
+8182,DANFORTH AVE,GREENWOOD AVE,43.6813959985646,-79.3321740091058,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8182.jpg
+8183,DANFORTH AVE,PAPE AVE,43.6789680044129,-79.3450940026882,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8183.jpg
+8184,BLOOR ST E,PARLIAMENT ST,43.6717750042749,-79.3711120036195,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8184.jpg
+8185,DUPONT ST,SPADINA RD,43.674790002261,-79.4068669984966,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8185.jpg
+8186,ST CLAIR AVE W,BATHURST ST,43.6832840041639,-79.4184480017144,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8186.jpg
+8187,EGLINTON AVE W,MARTIN GROVE RD,43.6742729967716,-79.5632249985061,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8187.jpg
+8188,EGLINTON AVE W,27 401 427 EGLINTON E RAMP,43.6739010061109,-79.5674490051473,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8188.jpg
+8189,LAWRENCE AVE E,KENNEDY RD,43.7497809959362,-79.2748700008901,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8189.jpg
+8190,LAWRENCE AVE E,WARDEN AVE,43.7455579997031,-79.2945790034661,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8190.jpg
+8191,SHEPPARD AVE E,404 N SHEPPARD AVE RAMP / YORKLAND RD,43.7756939971651,-79.3378910067079,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8191.jpg
+8192,FINCH AVE E,404 S FINCH RAMP,43.7946109966981,-79.3455480014191,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8192.jpg
+8193,FINCH AVE W,400 S FINCH W RAMP,43.7538769957631,-79.5327230002816,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8193.jpg
+8194,STEELES AVE E,KENNEDY RD,43.8239470013074,-79.3070240017318,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8194.jpg
+8195,STEELES AVE W,BATHURST ST,43.7927200071234,-79.4455909992798,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8195.jpg
+8196,STEELES AVE W,NORFINCH DR / 400 N FINCH W RAMP,43.7734599946248,-79.5317010027174,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8196.jpg
+8197,STEELES AVE W,WESTON RD,43.7702630013888,-79.5462309983191,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8197.jpg
+8198,STEELES AVE W,MARTIN GROVE RD,43.7580330011076,-79.6032530015559,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8198.jpg
+8199,YONGE ST,KING ST,43.6492570052918,-79.3777979961203,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8199.jpg
+8200,YONGE ST,KING ST,43.6492880049747,-79.3778560100493,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8200.jpg
+8201,QUEEN ST E,WOODBINE AVE,43.6687259993692,-79.305612000479,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8201.jpg
+8202,QUEEN ST E,WOODBINE AVE,43.6686610013541,-79.3059089992216,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8202.jpg
+8203,QUEEN ST,KINGSTON RD / EASTERN AVE,43.66706400923,-79.3128269972601,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8203.jpg
+8204,QUEEN ST E,LESLIE ST,43.6632320088546,-79.3299989995545,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8204.jpg
+8205,QUEEN ST E,BROADVIEW AVE,43.6587690048686,-79.3500040062003,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8205.jpg
+8206,QUEEN ST E,BROADVIEW AVE,43.658728004101,-79.3498740008699,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8206.jpg
+8207,KINGSTON RD,WOODBINE AVE,43.6739560046614,-79.3077629958218,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8207.jpg
+8208,KINGSTON RD,WOODBINE AVE,43.6737470017674,-79.3079389933436,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8208.jpg
+8209,DUNDAS ST E,JONES AVE,43.6662360057122,-79.3344880076474,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8209.jpg
+8210,BROADVIEW AVE,DUNDAS ST E,43.6624200063065,-79.3511489931235,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8210.jpg
+8211,BROADVIEW AVE,DUNDAS ST E,43.662566009357,-79.3513159948418,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8211.jpg
+8212,DUNDAS ST E,PARLIAMENT ST,43.6594629996268,-79.366157998329,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8212.jpg
+8213,DUNDAS ST E,PARLIAMENT ST,43.6593190045058,-79.3660960038927,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8213.jpg
+8214,DANFORTH AVE,WOODBINE AVE,43.6856530043537,-79.3125659968904,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8214.jpg
+8215,DANFORTH AVE,BROADVIEW AVE,43.6762439982069,-79.3591560011689,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8215.jpg
+8216,DANFORTH AVE,BROADVIEW AVE,43.6762900038671,-79.3590609943736,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8216.jpg
+8217,GERRARD ST E,WOODBINE AVE,43.6806780092268,-79.3108340074612,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8217.jpg
+8218,BAYVIEW AVE,LAWREN HARRIS SQ,43.6549068205085,-79.3536761945027,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8218.jpg
+8219,BAYVIEW AVE,RIVER ST,43.6659232583116,-79.3574727013327,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8219.jpg
+8220,BAYVIEW AVE,RIVER ST,43.6657488532651,-79.3572313196213,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8220.jpg
+8221,BAYVIEW AVE,ROSEDALE VALLEY RD,43.6700879052613,-79.3602066910709,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8221.jpg
+8222,BAYVIEW AVE,ROSEDALE VALLEY RD,43.6702507344075,-79.3604163055408,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8222.jpg
+8223,BAYVIEW AVE,POTTERY RD,43.6881625336124,-79.3635193843526,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8223.jpg
+8224,BAYVIEW AVE,POTTERY RD,43.6877914735415,-79.3634746152559,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8224.jpg
+8225,EGLINTON AVE W,ROYAL YORK RD,43.6822823169248,-79.5262258698008,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8225.jpg
+8226,EGLINTON AVE W,SCARLETT RD,43.6838620012644,-79.5110450049756,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8226.jpg
+8227,EGLINTON AVE W,ISLINGTON AVE,43.6797876707112,-79.538777842106,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8227.jpg
+8228,QUEENS PARK,QUEENS PARK CRES W,43.6664589982731,-79.3933573019622,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8228.jpg
+8229,QUEENS PARK,HOSKIN AVE,43.6651000023273,-79.3941209922341,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8229.jpg
+8230,QUEENS PARK CRES E,WELLESLEY ST,43.6635840038797,-79.3906480060688,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8230.jpg
+8231,EGLINTON AVE W,KIPLING AVE,43.6770409938542,-79.5510899939112,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8231.jpg
+8232,YONGE ST,BERWICK AVE,43.7040269976501,-79.3976580052819,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8232.jpg
+8233,MOUNT PLEASANT RD,BROADWAY AVE,43.7110320003666,-79.3913460026811,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8233.jpg
+8234,YONGE ST,BROADWAY AVE / MONTGOMERY AVE,43.7095019969611,-79.3990990096539,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8234.jpg
+8235,MOUNT PLEASANT RD,SOUDAN AVE,43.7059930403243,-79.3893795767421,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8235.jpg
+8236,PARLIAMENT ST,MILL ST,43.6501020067014,-79.3621960052269,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8236.jpg
+8237,CHERRY ST,EASTERN AVE,43.6538780040335,-79.3583589957559,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8237.jpg
+8238,CHERRY ST,MILL ST,43.6513330022476,-79.3573790018332,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8238.jpg
+8241,DUFFERIN ST,SASKATCHEWAN RD / BRITISH COLUMBIA RD,43.6326860020577,-79.4249289918329,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8241.jpg
+8248,SPADINA AVE,CLARENCE SQ,43.6433479983208,-79.394172997367,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8248.jpg
+8249,EGLINTON AVE E,HOLLY ST,43.7070739969293,-79.3967430005501,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8249.jpg
+8250,FINCH AVE E,DORIS AVE,43.7802480021657,-79.4133669971215,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8250.jpg
+8252,BRITISH COLUMBIA RD,YUKON PL / PRIVATE ACCESS,43.6316229981203,-79.4272779992321,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8252.jpg
+8253,DUNDAS ST W,BATHURST ST,43.6523110026444,-79.4060219932683,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8253.jpg
+8254,DUFFERIN ST,DUNDAS ST W,43.6496510050056,-79.4314530031817,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8254.jpg
+8255,STRACHAN AVE,EAST LIBERTY ST / ORDNANCE ST,43.6392840009529,-79.4108700033671,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8255.jpg
+8256,DUNDAS ST W,COLLEGE ST / ST HELEN'S AVE,43.6502809998322,-79.4410200023925,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8256.jpg
+8257,QUEEN ST W,DOVERCOURT RD,43.6434819971058,-79.4223690072574,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8257.jpg
+8258,QUEEN ST W,SHAW ST,43.6447009991392,-79.4162730002572,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8258.jpg
+8259,BREMNER BLVD,NAVY WHARF CRT,43.6407460081365,-79.3914950081819,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8259.jpg
+8260,STRACHAN AVE,WELLINGTON ST W / DOURO ST,43.6407580008455,-79.4114689982728,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8260.jpg
+8261,DUFFERIN ST,LIBERTY ST / PRIVATE ACCESS,43.6370740010363,-79.4266540030886,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8261.jpg
+8262,BREMNER BLVD,REES ST,43.640855999794,-79.3876230004413,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8262.jpg
+8263,LIBERTY ST,HANNA AVE / EAST LIBERTY ST,43.6385680051435,-79.4197019966587,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8263.jpg
+8264,FRONT ST W,BLUE JAYS WAY,43.6434210078596,-79.3912850050518,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc8264.jpg
+9100,DON VALLEY PARKWAY,EASTERN AVE,43.656846993807,-79.3524119952827,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9100.jpg
+9101,DON VALLEY PARKWAY,DUNDAS ST E,43.6618990027157,-79.3547479999587,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9101.jpg
+9102,DON VALLEY PARKWAY,PRINCE EDWARD VIADUCT / DANFORTH AVE,43.6719379994654,-79.3589880056487,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9102.jpg
+9103,DON VALLEY PARKWAY,PRINCE EDWARD VIADUCT / BLOOR ST E,43.6815389966516,-79.3627990035328,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9103.jpg
+9104,DON VALLEY PARKWAY S,LEASIDE BDGE,43.6934500073592,-79.3573090027233,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9104.jpg
+9105,DON VALLEY PARKWAY,LEASIDE BDGE,43.698183000675,-79.3495169988887,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9105.jpg
+9106,DON VALLEY PARKWAY S,DON MILLS RD,43.7005990065432,-79.33760500687,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9106.jpg
+9108,DON VALLEY PARKWAY,SPANBRIDGE RD,43.7076860024448,-79.3313179946592,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9108.jpg
+9109,DON VALLEY PARKWAY,SPANBRIDGE RD,43.7126170083698,-79.3250279902538,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9109.jpg
+9110,DON VALLEY PARKWAY N,ST DENNIS DR,43.7180650056625,-79.3272860007317,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9110.jpg
+9111,DON VALLEY PARKWAY,EGLINTON AVE E,43.7235310002238,-79.3299969948379,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9111.jpg
+9112,WYNFORD DR,WYNFORD DVP N RUMP,43.7269910035716,-79.3300139955125,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9112.jpg
+9113,DON VALLEY PARKWAY,CONCORDE GT,43.7309400013097,-79.3305190031422,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9113.jpg
+9114,DON VALLEY PARKWAY N,LAWRENCE AVE E,43.7396720012104,-79.3318240037522,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9114.jpg
+9115,DON VALLEY PARKWAY N,BROOKBANKS DR,43.7492470071044,-79.333251989374,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9115.jpg
+9116,DON VALLEY PARKWAY N,YORK MILLS E DVP N RAMP,43.7579560075967,-79.3353700007091,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9116.jpg
+9200,LAKE SHORE BLVD E,DON ROADWAY,43.6499680066663,-79.3492809942495,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9200.jpg
+9201,F G GARDINER XY,PARLIAMENT ST,43.6477380054014,-79.3610430031224,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9201.jpg
+9202,F G GARDINER XY,LOWER JARVIS ST,43.6456270004132,-79.3700230063546,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9202.jpg
+9203,LAKE SHORE BLVD W,BREMNER BLVD,43.6423109978803,-79.3792179911381,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9203.jpg
+9204,LAKE SHORE BLVD W,REES ST,43.6395140007549,-79.3868910021742,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9204.jpg
+9205,F G GARDINER XY E,SPADINA AVE,43.6381469974869,-79.3943709985331,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9205.jpg
+9206,F G GARDINER XY E,BATHURST ST,43.6378270070491,-79.4004800005971,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9206.jpg
+9207,F G GARDINER XY E,STRACHAN AVE,43.6373570019154,-79.4117380059441,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9207.jpg
+9208,F G GARDINER XY E,DUFFERIN ST,43.634504009513,-79.4222449952726,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9208.jpg
+9209,F G GARDINER XY E,NET DR,43.6341280019222,-79.4378829948916,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9209.jpg
+9210,F G GARDINER XY E,PARKSIDE DR,43.638305007358,-79.4499439940186,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9210.jpg
+9211,F G GARDINER XY E,ELLIS AVE,43.6379430029546,-79.4622069976607,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9211.jpg
+9212,QUEENSWAY E GARDINER RAMP,F G GARDINER XY E,43.6349740064415,-79.4695400027085,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9212.jpg
+9213,GARDINER E LAKE SHORE WEST E RAMP,LAKE SHORE BLVD W,43.6310649990376,-79.4761250018304,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9213.jpg
+9214,F G GARDINER XY E,PARK LAWN RD,43.6273100042685,-79.4818560015722,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9214.jpg
+9215,F G GARDINER XY E,PARK LAWN RD,43.6244640079195,-79.4933339927156,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9215.jpg
+9216,F G GARDINER XY E,ROYAL YORK RD,43.6223820046123,-79.5006590044699,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9216.jpg
+9217,GARDINER C E ISLINGTON N RAMP,FG GARDINER C E,43.62011400308,-79.5128300007935,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9217.jpg
+9218,KIPLING AVE,F G GARDINER C E,43.617626001198,-79.5256750007281,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9218.jpg
+9219,F G GARDINER XY E,WICKMAN RD,43.6165489965847,-79.53145298897,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9219.jpg
+9220,GARDINER X W 427 X N RAMP,THE EAST MALL,43.614837004391,-79.5467099986076,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9220.jpg
+9221,F G GARDINER XY W,DON VALLEY PARKWAY N,43.6501000031467,-79.3494180048955,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9221.jpg
+9300,F G GARDINER XY W,DON VALLEY PARKWAY S,43.6500780021804,-79.3498890023578,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9300.jpg
+9301,LAKE SHORE BLVD E,PARLIAMENT ST,43.6475870034718,-79.3614029956098,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9301.jpg
+9302,LAKE SHORE BLVD E,LOWER JARVIS ST,43.6456860000307,-79.3697740006252,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9302.jpg
+9303,F G GARDINER XY W,YONGE ST / LAKESHORE W GARDINER,43.6443900009306,-79.3757669981816,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9303.jpg
+9304,F G GARDINER XY W,BAY ST,43.6433340040817,-79.377829004338,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9304.jpg
+9305,HARBOUR ST,YORK ST,43.641037002254,-79.3808609970771,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9305.jpg
+9306,LAKE SHORE BLVD W,REES ST,43.6395040048354,-79.3870139972948,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9306.jpg
+9307,F G GARDINER XY W,SPADINA AVE,43.6389169972833,-79.3921100025246,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9307.jpg
+9308,LAKE SHORE BLVD W,REMEMBRANCE DR,43.6355990025104,-79.4035780024507,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9308.jpg
+9309,LAKE SHORE BLVD W,NEWFOUNDLAND RD / ONTARIO PLACE BLVD,43.6327680018944,-79.4097499935214,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9309.jpg
+9310,LAKE SHORE BLVD W,ONTARIO DR / REMEMBRANCE DR,43.6305190040779,-79.418522007892,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9310.jpg
+9311,LAKE SHORE BLVD W,BRITISH COLUMBIA RD / LAKESHORE BRITISH COLUMBIA RAMP,43.6304970045572,-79.4273479987181,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9311.jpg
+9312,LAKE SHORE BLVD W,BRITISH COLUMBIA RD / LAKESHORE BRITISH COLUMBIA RAMP,43.6320769993127,-79.4301180024874,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9312.jpg
+9313,LAKE SHORE BLVD W,LAKESHORE BRITISH COLUMBIA RAMP,43.6317460084313,-79.4309909945143,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9313.jpg
+9314,LAKE SHORE BLVD W,OARSMAN DR,43.6326359951403,-79.4362000016533,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9314.jpg
+9315,LAKE SHORE BLVD W,BUDAPEST LANE,43.6373770082405,-79.4499400051231,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9315.jpg
+9316,LAKE SHORE BLVD W,PARKSIDE DR,43.6382570052896,-79.4557780033539,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9316.jpg
+9317,LAKE SHORE BLVD W,COLBORNE LODGE DR,43.6376869949131,-79.4587449977036,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9317.jpg
+9318,LAKE SHORE BLVD W,ELLIS AVE,43.6363000021662,-79.4651059985682,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9318.jpg
+9319,PALACE PIER CRT,WATERFRONT DR,43.6313530005945,-79.4724520071914,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9319.jpg
+9320,LAKE SHORE BLVD W,PALACE PIER CRT,43.6312750002963,-79.4744940000104,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9320.jpg
+9321,GARDINER E LAKE SHORE WEST E RAMP,LAKE SHORE BLVD W,43.6291600082599,-79.4783930058058,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9321.jpg
+9322,LAKE SHORE BLVD W,MARINE PARADE DR,43.6229250065686,-79.4810720094654,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9322.jpg
+9323,LAKE SHORE BLVD E,LESLIE ST,43.6593069981111,-79.3287489972742,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9323.jpg
+9324,LAKE SHORE BLVD E,EMDAABIIMOK AVE / ASHBRIDGES BAY PARK RD,43.6622290032791,-79.314555000777,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9324.jpg
+9325,F G GARDINER XY W,CHERRY ST,43.6493600074639,-79.356590998933,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9325.jpg
+9326,LAKE SHORE BLVD E,CHERRY ST,43.64810200957,-79.35458600059,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9326.jpg
+9327,LAKE SHORE BLVD E,LOWER SHERBOURNE ST,43.6462210002578,-79.3661919894378,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9327.jpg
+9328,LAKE SHORE BLVD E,LOWER SHERBOURNE ST,43.646421004606,-79.3662329968153,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9328.jpg
+9329,LAKE SHORE BLVD W,LOWER SIMCOE ST,43.6403970071049,-79.3831220014273,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9329.jpg
+9330,GARDINER E SPADINA AV RAMP,SPADINA AVE,43.6381469974869,-79.3943709985331,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9330.jpg
+9331,LAKE SHORE BLVD W,BATHURST ST / FLEET ST,43.636764996885,-79.39961499644,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9331.jpg
+9332,LAKE SHORE BLVD W,FORT YORK BLVD,43.635577004934,-79.4070579977107,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9332.jpg
+9333,LAKE SHORE BLVD W,PARKSIDE DR,43.6382610009041,-79.4536620000754,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9333.jpg
+9334,LAKE SHORE BLVD W,STRACHAN AVE / REMEMBRANCE DR,43.6343519991048,-79.4086120044091,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9334.jpg
+9335,LAKE SHORE BLVD W,JAMESON AVE,43.6332980062797,-79.434677002517,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9335.jpg
+9336,LAKE SHORE BLVD,CARLAW AVE,43.654823006857,-79.3375519989076,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9336.jpg
+9400,W R ALLEN RD S,EGLINTON AVE W,43.6985680084763,-79.4362670036875,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9400.jpg
+9401,W R ALLEN RD,ELM RIDGE DR,43.7027970019009,-79.4379730004444,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9401.jpg
+9402,W R ALLEN RD,VIEWMOUNT AVE,43.7076160091614,-79.440468994215,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9402.jpg
+9403,W R ALLEN RD,GLENGROVE AVE,43.7112220045817,-79.4427550001998,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9403.jpg
+9404,W R ALLEN RD,LAWRENCE AVE W,43.7164580038702,-79.4447899986022,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9404.jpg
+9405,W R ALLEN RD,401 C E ALLEN RD RAMP,43.7281430100496,-79.4486340048464,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9405.jpg
+9406,W R ALLEN RD,TRANSIT RD,43.7396090005832,-79.4525700081368,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9406.jpg
+9407,W R ALLEN RD,SHEPPARD AVE W,43.749973995884,-79.4635920089041,https://opendata.toronto.ca/transportation/tmc/rescucameraimages/CameraImages/loc9407.jpg

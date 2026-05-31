@@ -1,0 +1,113 @@
+{
+  "mode": "live",
+  "date": "2026-05-30",
+  "n_events": 26,
+  "n_large": 2,
+  "n_restrictions": 1032,
+  "baseline_avg": 2.494047619047619,
+  "event_avg": 2.511904761904762,
+  "n_affected": 194,
+  "events": [
+    {
+      "name": "The Greater Good - Outdoor Patio Extension",
+      "category": "small",
+      "address": "229 Geary Ave "
+    },
+    {
+      "name": "Mezza Notte Trattoria - Patio 2026",
+      "category": "small",
+      "address": "3169 Dufferin St "
+    },
+    {
+      "name": "Reverie - Gotta Have House",
+      "category": "small",
+      "address": "569 College St "
+    },
+    {
+      "name": "Chotto Matte - Seasonal Patio - Temporary Extension of Premise",
+      "category": "small",
+      "address": "161 Bay St S5"
+    },
+    {
+      "name": "Story Toronto - Exposed Presents Spring Has Sprung Afterparties",
+      "category": "small",
+      "address": "214 Adelaide St W "
+    },
+    {
+      "name": "Future - May Day 2026",
+      "category": "small",
+      "address": "570 Queen St W "
+    },
+    {
+      "name": "Ultraviolet - May Day 2026",
+      "category": "small",
+      "address": "1096 Queen St W 2 Floor"
+    },
+    {
+      "name": "Souvlaki Emporium - Temporary Seasonal Patio",
+      "category": "small",
+      "address": "1545 Dupont St "
+    },
+    {
+      "name": "The Garrison -  Toronto Music Passport Electronica",
+      "category": "small",
+      "address": "1197 Dundas St W "
+    },
+    {
+      "name": "Last Call Cocktail Club - May Day",
+      "category": "small",
+      "address": "584 College St "
+    },
+    {
+      "name": "Kitchen King Jamaican Restaurant - Kitchen king customer appreciation event",
+      "category": "small",
+      "address": "885 Progress Ave 108"
+    },
+    {
+      "name": "DND Toronto Inc - Fashion Art Toronto",
+      "category": "small",
+      "address": "550 Queen St W "
+    },
+    {
+      "name": " Baro / Pablo's /The Loft /El patio - Fashion Art Toronto",
+      "category": "small",
+      "address": "485 King St W "
+    },
+    {
+      "name": "Century - Fashion Art Toronto",
+      "category": "small",
+      "address": "580 King St W "
+    },
+    {
+      "name": "Great Lakes Brewpub - Pride and Remembrance Kick Off Run",
+      "category": "large",
+      "address": "11 Lower Jarvis St 5-8"
+    },
+    {
+      "name": "Reverie in Little Italy - Project 19",
+      "category": "small",
+      "address": "569 College St "
+    },
+    {
+      "name": "Greta Bar - DJ Pop Ups at Greta Bar",
+      "category": "small",
+      "address": "590 King St W "
+    },
+    {
+      "name": "The Soulcial House",
+      "category": "small",
+      "address": "100 Symes Rd "
+    },
+    {
+      "name": "Toronto Night Market",
+      "category": "medium",
+      "address": "415 King St W "
+    },
+    {
+      "name": "She/Her Space",
+      "category": "small",
+      "address": "100 Symes Rd OBJX Studio -Unit 200 A"
+    }
+  ],
+  "timestamp": "2026-05-30T13:25:52.918951"
+}

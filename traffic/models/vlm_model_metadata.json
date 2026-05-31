@@ -1,0 +1,19 @@
+{
+  "task": "temporal nowcast (observe t -> predict t+1)",
+  "synthetic": true,
+  "base_features": 6,
+  "vlm_features": 5,
+  "total_features": 11,
+  "baseline_accuracy": 0.634037558685446,
+  "accuracy": 0.7495305164319249,
+  "vlm_gain": 0.11549295774647894,
+  "persistence_accuracy": 0.7474178403755869,
+  "vlm_feature_importance": {
+    "obs_level": 41.3497314453125,
+    "obs_trend": 1.081609845161438,
+    "area_level": 1.3708038330078125,
+    "obs_incident": 2.868654251098633,
+    "obs_vehicles": 7.882402420043945
+  },
+  "timestamp": "2026-05-30T16:15:23.388949"
+}

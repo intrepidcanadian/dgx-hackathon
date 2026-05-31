@@ -46,6 +46,9 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 MODEL_DIR = Path(__file__).parent.parent / "models"
 VLM_DIR = DATA_DIR / "vlm_results"
 STATE_DIR = DATA_DIR / "monitor_state"
+# Optional on-disk archive of the exact frames each sweep analyzed, kept for the
+# record (off by default — pass --save-frames). One subdir per sweep timestamp.
+FRAMES_DIR = DATA_DIR / "camera_frames"
 
 for d in [VLM_DIR, STATE_DIR, DATA_DIR / "processed"]:
     d.mkdir(parents=True, exist_ok=True)
@@ -265,15 +268,25 @@ def _generate_description(level, vehicles, location, weather):
 # ============================================================
 # LIVE MODE (Ollama VLM)
 # ============================================================
-def run_live_sweep(cameras_df, ollama_url, model, limit, cycle=0):
+def run_live_sweep(cameras_df, ollama_url, model, limit, cycle=0, save_frames=False):
     """Run actual VLM analysis on camera images.
 
     Rotates through the full camera list across successive cycles so coverage
     accumulates toward the total (e.g. 336) rather than re-scanning the same
     first `limit` cameras every sweep.
+
+    When ``save_frames`` is set, the exact JPEG analyzed for each camera is
+    written to ``data/camera_frames/<sweep_ts>/loc<REC_ID>.jpg`` so the DGX
+    keeps a durable record of what the VLM actually saw each sweep.
     """
     import base64
     import requests as req
+
+    frames_subdir = None
+    if save_frames:
+        sweep_tag = datetime.now().strftime("%Y%m%dT%H%M%S")
+        frames_subdir = FRAMES_DIR / sweep_tag
+        frames_subdir.mkdir(parents=True, exist_ok=True)
 
     total = len(cameras_df)
     if limit and limit < total:
@@ -312,6 +325,14 @@ def run_live_sweep(cameras_df, ollama_url, model, limit, cycle=0):
             img_resp = req.get(image_url, timeout=10)
             img_resp.raise_for_status()
             img_b64 = base64.b64encode(img_resp.content).decode("utf-8")
+
+            # Optionally keep the exact frame analyzed this sweep.
+            if frames_subdir is not None:
+                rec_id = cam.get("REC_ID", i)
+                try:
+                    (frames_subdir / f"loc{rec_id}.jpg").write_bytes(img_resp.content)
+                except Exception as e:
+                    print(f"(frame save failed: {e}) ", end="", flush=True)
 
             # Send to VLM
             start = time.time()
@@ -560,6 +581,9 @@ def main():
                         help="VLM model name (live mode)")
     parser.add_argument("--cycles", type=int, default=0,
                         help="Max cycles (0 = infinite)")
+    parser.add_argument("--save-frames", action="store_true",
+                        help="Archive each analyzed JPEG to data/camera_frames/"
+                             "<sweep_ts>/ for the record (live mode only)")
     args = parser.parse_args()
 
     if not args.demo and not args.live:
@@ -619,7 +643,7 @@ def main():
             print(f"  Analyzing {args.cameras} cameras via {args.model}...")
             results, state = run_live_sweep(
                 cameras_df, args.ollama_url, args.model, args.cameras,
-                cycle=cycle - 1)
+                cycle=cycle - 1, save_frames=args.save_frames)
 
         if not results:
             print("  ⚠ No results — retrying next cycle")

@@ -157,6 +157,8 @@ def stage_vlm(args):
               "--ollama-url", args.ollama_url, "--model", args.model]
     if args.cycles:
         extra += ["--cycles", str(args.cycles)]
+    if getattr(args, "save_frames", False):
+        extra.append("--save-frames")
     run("15_vlm_orchestrator", *extra)
 
 
@@ -230,6 +232,8 @@ def main():
     sp_vlm.add_argument("--cameras", type=int, default=50)
     sp_vlm.add_argument("--interval", type=int, default=300, help="seconds between sweeps")
     sp_vlm.add_argument("--cycles", type=int, default=0, help="0 = run forever")
+    sp_vlm.add_argument("--save-frames", dest="save_frames", action="store_true",
+                        help="archive each analyzed JPEG to data/camera_frames/")
     sp_vlm.add_argument("--ollama-url", default="http://localhost:11434")
     sp_vlm.add_argument("--model", default="gemma3:4b")
 
