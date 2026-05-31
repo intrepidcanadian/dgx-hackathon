@@ -3208,34 +3208,91 @@ with tab_arch:
     st.markdown('<div class="cc-panel-title" style="margin-top:10px">'
                 '📚 Source datasets — what the models are built from</div>',
                 unsafe_allow_html=True)
+    # Actual coverage of the prepared training corpus (count_date span across
+    # train+test), read straight off the parquets so the table never drifts
+    # from the data. `test` in memory is only the recent split, so we read the
+    # count_date column from both files on disk to get the full span.
+    _cspan = "2020-01 – 2026-05"
+    _cd = None
+    try:
+        _cd_parts = []
+        for _fn in ("train.parquet", "test.parquet"):
+            _fp = TRAFFIC_DATA / "processed" / _fn
+            if _fp.exists():
+                _cd_parts.append(pd.to_datetime(
+                    pd.read_parquet(_fp, columns=["count_date"])["count_date"],
+                    errors="coerce").dropna())
+        if _cd_parts:
+            _cd = pd.concat(_cd_parts)
+            if len(_cd):
+                _cspan = f"{_cd.min():%Y-%m} – {_cd.max():%Y-%m}"
+    except Exception:
+        _cd = None
+
+    # Live record counts where the data is loaded, so the figures stay honest.
+    _ntrain = _tmeta.get("train_size")
+    _ntest = _tmeta.get("test_size")
+    _nrows = (f"{_ntrain + _ntest:,} modeling rows ({_ntrain:,} train / {_ntest:,} test)"
+              if isinstance(_ntrain, int) and isinstance(_ntest, int)
+              else "346,154 modeling rows")
+    # Weather hourly obs ≈ one per hour over the count span.
+    _nwx = "~55,800 hourly obs (1 / hr)"
+    try:
+        if _cd is not None and len(_cd):
+            _hrs = int((_cd.max() - _cd.min()).total_seconds() // 3600) + 1
+            _nwx = f"~{_hrs:,} hourly obs (1 / hr)"
+    except Exception:
+        pass
+    _ncams = "336 cameras"
+    try:
+        _cams = traffic.get("cams")
+        if _cams is not None and hasattr(_cams, "__len__"):
+            _ncams = f"{len(_cams):,} cameras"
+    except Exception:
+        pass
+
     data_tbl = pd.DataFrame([
         {"Dataset (Toronto Open Data)": "Multimodal Intersection (Turning Movement) Counts",
          "CKAN resource id": "262469c2-abfe-4756-9068-4ea5c7ba1af7",
          "What it provides": "15-min intersection counts by mode (cars/trucks/buses/bikes/peds)",
+         "Time frame": f"{_cspan} (prepared subset)",
+         "Records": _nrows,
          "Feeds": "Base XGBoost training + the congestion target"},
         {"Dataset (Toronto Open Data)": "Midblock Speed & Volume",
          "CKAN resource id": "b72cca3a-8190-47f7-8761-98f0b49bafc7",
          "What it provides": "Daily volumes + avg / 85th-pct speed per road segment",
+         "Time frame": "Rolling multi-year counts (most recent per segment)",
+         "Records": "~17k road-segment counts",
          "Feeds": "Speed/volume context"},
         {"Dataset (Toronto Open Data)": "Traffic Cameras",
          "CKAN resource id": "824d2986-2fe0-4513-bdfb-e37e2499e7a9",
-         "What it provides": "336 cameras with lat/lon + live image URLs",
+         "What it provides": "Cameras with lat/lon + live image URLs",
+         "Time frame": "Live snapshot (current camera list + real-time frames)",
+         "Records": _ncams,
          "Feeds": "gemma3 VLM frame source"},
         {"Dataset (Toronto Open Data)": "Midblock Counts — summary (svc_most_recent_summary_data)",
          "CKAN resource id": "e90038e7-ccb9-4bd2-af3e-696adc904c18",
          "What it provides": "Measured daily/peak volume + typical speed per station",
+         "Time frame": "Latest count per station (rolling)",
+         "Records": "~14k count stations",
          "Feeds": "Per-camera baseline (17_camera_baseline.py)"},
         {"Dataset (Toronto Open Data)": "Special Events (Liquor Licence endorsements)",
          "CKAN resource id": "e9f77756-2baf-46ba-b2c6-4050e2fba755",
-         "What it provides": "~4,420 municipally-significant events 2019–2026 w/ lat/lon + dates",
+         "What it provides": "Municipally-significant events w/ lat/lon + dates",
+         "Time frame": "2019 – 2026 (event dates)",
+         "Records": "~4,420 events",
          "Feeds": "Event-aware model (13_enrich_events.py)"},
         {"Dataset (Toronto Open Data)": "Disruption feeds — utility cuts, TTC delays, KSI collisions, permits, restrictions",
          "CKAN resource id": "see ids below",
          "What it provides": "Active closures/construction, transit delays, incident history",
+         "Time frame": "Live + recent history (varies by feed; KSI 2006–present)",
+         "Records": "Varies by feed (KSI ~18k; restrictions live)",
          "Feeds": "Disruption features (08_enrich_traffic_data.py)"},
         {"Dataset (Toronto Open Data)": "Open-Meteo ERA5 archive (not Toronto OD)",
          "CKAN resource id": "archive-api.open-meteo.com",
          "What it provides": "Historical hourly temp / precip / snow / wind / visibility",
+         "Time frame": f"{_cspan} (fetched to match the count span)",
+         "Records": _nwx,
          "Feeds": "Base congestion model + Weather Impact panel (18_enrich_weather.py)"},
     ])
     st.dataframe(data_tbl, hide_index=True, width='stretch')
