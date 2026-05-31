@@ -2106,6 +2106,17 @@ with tab_commute:
                        f"{sim_active['location']}) is not near this route.")
         eff_event = event_add if apply_event else 0.0
 
+        # Live-adjusted "leave now" estimate (falls back to typical when no
+        # live data and no event). Computed once so the impact panel AND the
+        # departure-window comparison share the same numbers.
+        has_live = (live_level is not None or eff_event > 0)
+        _base_cong = (0.35 * typ_cong + 0.65 * live_level
+                      if live_level is not None else typ_cong)
+        route_cong = min(3.0, _base_cong + eff_event)
+        live_drive = _drive_min(route_cong)
+        delta_min = live_drive - typ_drive
+        lvl_now = (live_level if live_level is not None else _base_cong) + eff_event
+
         # Track the route's live score vs the hourly baseline over time so you
         # can watch how each new camera sweep shifts it (persists to disk).
         route_key = f"{from_name} → {to_name}"
@@ -2166,14 +2177,7 @@ with tab_commute:
                         '📹 Live camera impact · leaving now</div>',
                         unsafe_allow_html=True)
 
-            if live_level is not None or eff_event > 0:
-                base_cong = (0.35 * typ_cong + 0.65 * live_level
-                             if live_level is not None else typ_cong)
-                route_cong = min(3.0, base_cong + eff_event)
-                live_drive = _drive_min(route_cong)
-                delta_min = live_drive - typ_drive
-                lvl_now = (live_level if live_level is not None else base_cong) + eff_event
-
+            if has_live:
                 lv1, lv2, lv3 = st.columns(3)
                 lv1.metric(
                     "Expected (typical)", f"{typ_drive:.0f} min",
@@ -2215,14 +2219,87 @@ with tab_commute:
             st.markdown('<div class="cc-panel-title" style="margin-top:8px">'
                         'Departure Window Analysis</div>',
                         unsafe_allow_html=True)
-            chart_data = results_df.set_index("Hour")
+
+            # --- Leave-now (your timing) vs the best window, side by side ---
+            cur_label = f"{cur_hour:02d}:00"
+            _now_row = results_df[results_df["Hour"] == cur_label]
+            typ_now_drive = (_now_row["Drive (min)"].iloc[0]
+                             if len(_now_row) else typ_drive)
+            typ_now_cong = (_now_row["Congestion"].iloc[0]
+                            if len(_now_row) else typ_cong)
+            now_drive = live_drive if has_live else typ_now_drive
+            wait_save = now_drive - best["Drive (min)"]
+
+            w1, w2, w3 = st.columns(3)
+            w1.metric(
+                f"Leave now ({cur_label}) · model",
+                f"{typ_now_drive:.0f} min",
+                help=f"What the historical model expects for your current "
+                     f"departure time ({typ_now_cong:.1f}/3).")
+            w2.metric(
+                "Leave now · with live data",
+                f"{now_drive:.0f} min",
+                delta=(f"{now_drive - typ_now_drive:+.0f} min vs model"
+                       if has_live else None),
+                delta_color="inverse",
+                help=("Same departure time, re-scored with live cameras"
+                      + (" + simulated event" if eff_event > 0 else "")
+                      + f" (now {route_cong:.1f}/3)." if has_live else
+                      "No live data on this route yet."))
+            w3.metric(
+                f"Best window ({best['Hour']})",
+                f"{best['Drive (min)']:.0f} min",
+                delta=f"{-wait_save:+.0f} min vs now",
+                delta_color="inverse",
+                help=f"Lightest departure today ({best['Congestion']:.1f}/3). "
+                     f"Delta is the saving vs leaving now.")
+
+            # --- Daily curve with your live "now" point overlaid ---
+            import altair as alt
+            plot_df = results_df[["Hour", "Drive (min)", "Congestion"]].copy()
+            plot_df.columns = ["hour", "typ_min", "typ_cong"]
+            plot_df["live_min"] = float("nan")
+            plot_df["live_cong"] = float("nan")
+            if has_live and cur_label in set(plot_df["hour"]):
+                _i = plot_df.index[plot_df["hour"] == cur_label][0]
+                plot_df.loc[_i, "live_min"] = round(now_drive, 0)
+                plot_df.loc[_i, "live_cong"] = round(route_cong, 2)
+            _live_pts = plot_df.dropna(subset=["live_min"])
+
+            def _curve(y_typ, y_live, typ_color, y_title):
+                base = alt.Chart(plot_df).encode(
+                    x=alt.X("hour:N", title="Departure"))
+                line = base.mark_line(color=typ_color, point=True).encode(
+                    y=alt.Y(f"{y_typ}:Q", title=y_title))
+                if len(_live_pts):
+                    pt = alt.Chart(_live_pts).mark_point(
+                        color="#00e676", size=200, filled=True).encode(
+                        x=alt.X("hour:N"), y=alt.Y(f"{y_live}:Q"))
+                    return (line + pt).properties(height=240)
+                return line.properties(height=240)
+
             cc1, cc2 = st.columns(2)
             with cc1:
-                st.bar_chart(chart_data["Drive (min)"], color="#ff4b5c")
-                st.caption("Estimated drive time by departure hour")
+                st.altair_chart(_curve("typ_min", "live_min", "#ff4b5c",
+                                       "Drive (min)"), use_container_width=True)
+                st.caption("Drive time by departure hour (red = typical curve). "
+                           "Green dot = live-adjusted estimate for leaving now.")
             with cc2:
-                st.bar_chart(chart_data["Congestion"], color="#00e676")
-                st.caption("Average congestion level by hour")
+                st.altair_chart(_curve("typ_cong", "live_cong", "#ffa600",
+                                       "Congestion (0–3)"),
+                                use_container_width=True)
+                st.caption("Congestion (0–3) by hour (orange = typical). "
+                           "Green dot = what cameras say right now.")
+
+            if has_live:
+                _vs = ("above" if now_drive - typ_now_drive > 0.5 else
+                       "below" if now_drive - typ_now_drive < -0.5 else "on")
+                st.caption(
+                    f"Your live estimate for leaving now sits **{_vs}** the "
+                    f"typical curve ({now_drive:.0f} vs {typ_now_drive:.0f} min). "
+                    f"Waiting for the {best['Hour']} window would "
+                    + (f"save ~{wait_save:.0f} min." if wait_save > 0.5 else
+                       "not help much from here."))
 
             with st.expander("All departure windows"):
                 st.dataframe(results_df, hide_index=True, width=600)
