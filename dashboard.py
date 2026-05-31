@@ -248,6 +248,24 @@ def load_traffic():
         with open(TRAFFIC_DATA / "processed" / "feature_cols.json") as f:
             feature_cols = json.load(f)
 
+        # Event-aware enriched model (optional). Trained by
+        # 13_enrich_events.py --retrain with citywide event-density + road
+        # restriction features. We keep the base model as the always-present
+        # backbone and use this one only to estimate today's event uplift.
+        model_enriched = None
+        feature_cols_enriched = None
+        enr_model_file = TRAFFIC_MODELS / "xgb_congestion_enriched.json"
+        enr_feat_file = TRAFFIC_DATA / "processed" / "feature_cols_enriched.json"
+        if enr_model_file.exists() and enr_feat_file.exists():
+            try:
+                model_enriched = xgb.Booster()
+                model_enriched.load_model(str(enr_model_file))
+                with open(enr_feat_file) as f:
+                    feature_cols_enriched = json.load(f)
+            except Exception:
+                model_enriched = None
+                feature_cols_enriched = None
+
         test = pd.read_parquet(TRAFFIC_DATA / "processed" / "test.parquet")
         cams = pd.read_csv(TRAFFIC_DATA / "raw" / "traffic_cameras.csv")
 
@@ -298,6 +316,8 @@ def load_traffic():
 
         return {
             "model": model, "feature_cols": feature_cols, "test": test,
+            "model_enriched": model_enriched,
+            "feature_cols_enriched": feature_cols_enriched,
             "cams": cams, "meta": meta, "preds": preds, "vlm": vlm,
             "hermes": hermes, "commute": commute, "nowcast": nowcast,
             "vlm_model": vlm_model, "vlm_meta": vlm_meta,
@@ -599,6 +619,85 @@ def fetch_live_events():
     except Exception:
         pass
     return events
+
+
+# Citywide event-density features the enriched congestion model was trained on
+# (see traffic/scripts/13_enrich_events.py). Kept identical here so we can
+# compute *today's* values live and feed them to the model.
+EVENT_FEATURE_COLS = ["n_events_today", "n_large_events", "n_medium_events",
+                      "event_spread", "is_major_event_day", "is_event_day"]
+
+
+def today_event_features(events):
+    """Turn today's fetched events into the 6 citywide features the enriched
+    model expects, matching the definitions in 13_enrich_events.py."""
+    if not events:
+        return {c: 0.0 for c in EVENT_FEATURE_COLS}
+    n = len(events)
+    n_large = sum(1 for e in events if e.get("category") == "large")
+    n_medium = sum(1 for e in events if e.get("category") == "medium")
+    lats = [e["lat"] for e in events if e.get("lat") is not None]
+    lons = [e["lon"] for e in events if e.get("lon") is not None]
+    spread = (float(np.std(lats)) + float(np.std(lons))) if len(lats) >= 2 else 0.0
+    return {
+        "n_events_today": float(n),
+        "n_large_events": float(n_large),
+        "n_medium_events": float(n_medium),
+        "event_spread": round(spread, 4),
+        "is_major_event_day": float(n_large > 0),
+        "is_event_day": float(n > 0),
+    }
+
+
+@st.cache_data(ttl=300)
+def event_congestion_uplift(_traffic, evt_feats, hour):
+    """Model-estimated marginal effect of today's events on congestion.
+
+    Runs the *enriched* XGBoost model over the current-hour population from the
+    test set twice — once with today's event features, once with them zeroed —
+    and returns the difference in expected congestion level (0–3). This is the
+    honest "how much do today's events lift congestion" number: everything else
+    is held fixed, only the event features are toggled.
+
+    Returns {"with_events","no_events","delta", **evt_feats} or None when the
+    enriched model/feature list isn't available. `evt_feats` (a plain dict) is
+    passed in rather than the events list so Streamlit can hash the cache key.
+    """
+    model = _traffic.get("model_enriched")
+    feats = _traffic.get("feature_cols_enriched")
+    test = _traffic.get("test")
+    if model is None or not feats or test is None or len(test) == 0:
+        return None
+    try:
+        import xgboost as xgb
+        df = test[test["hour"] == hour] if "hour" in test.columns else test
+        if len(df) == 0:
+            df = test
+        df = df.head(4000)  # cap for snappy UI
+
+        base = pd.DataFrame(index=range(len(df)))
+        for c in feats:
+            base[c] = df[c].to_numpy() if c in df.columns else 0.0
+
+        with_evt = base.copy()
+        no_evt = base.copy()
+        for c in EVENT_FEATURE_COLS:
+            if c in with_evt.columns:
+                with_evt[c] = evt_feats.get(c, 0.0)
+                no_evt[c] = 0.0
+
+        def _exp_level(mat):
+            d = xgb.DMatrix(mat[feats].to_numpy(), feature_names=feats)
+            p = model.predict(d)
+            if getattr(p, "ndim", 1) == 2:        # multi:softprob → expected level
+                levels = np.arange(p.shape[1])
+                return float((p * levels).sum(axis=1).mean())
+            return float(np.mean(p))
+
+        w, n = _exp_level(with_evt), _exp_level(no_evt)
+        return {"with_events": w, "no_events": n, "delta": w - n, **evt_feats}
+    except Exception:
+        return None
 
 
 @st.cache_data(ttl=900)
@@ -1201,7 +1300,18 @@ with tab_overview:
     if traffic["available"]:
         hour_data = traffic["test"][traffic["test"]["hour"] == now.hour]
         avg_cong = hour_data["congestion_level"].mean() if len(hour_data) > 0 else 0.0
-    cong_label = ["Free Flow", "Moderate", "Heavy", "Gridlock"][min(int(avg_cong), 3)]
+
+    # Event-aware adjustment: estimate how much today's real events lift
+    # congestion using the enriched model (held-fixed counterfactual), and fold
+    # that uplift into the headline "Traffic Now" so congestion reflects the
+    # day's events rather than a pure historical average.
+    evt_uplift = None
+    if traffic["available"]:
+        evt_uplift = event_congestion_uplift(
+            traffic, today_event_features(events), now.hour)
+    evt_delta = max(0.0, evt_uplift["delta"]) if evt_uplift else 0.0
+    avg_cong_adj = min(3.0, avg_cong + evt_delta)
+    cong_label = ["Free Flow", "Moderate", "Heavy", "Gridlock"][min(int(round(avg_cong_adj)), 3)]
 
     avg_occ = 0.0
     if housing["available"]:
@@ -1230,7 +1340,14 @@ with tab_overview:
 
     # ---- KPI row ----
     k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Traffic Now", cong_label, f"Level {avg_cong:.1f}")
+    if evt_delta >= 0.05:
+        k1.metric("Traffic Now", cong_label,
+                  f"+{evt_delta:.2f} from events",
+                  help=f"Historical hour avg {avg_cong:.1f}/3, adjusted to "
+                       f"{avg_cong_adj:.1f}/3 by the enriched model's estimate "
+                       f"of today's {len(events)} events.")
+    else:
+        k1.metric("Traffic Now", cong_label, f"Level {avg_cong_adj:.1f}")
     k2.metric("Events Today", len(events))
     k3.metric("Major Events", len(large_events))
     k4.metric("Road Restrictions", len(restrictions))
@@ -1239,6 +1356,20 @@ with tab_overview:
     else:
         nc = traffic.get("nowcast") or {}
         k5.metric("Nowcast (Next Hr)", nc.get("predicted_label", "—"))
+
+    if evt_uplift is not None and len(events) > 0:
+        st.caption(
+            f"📅 **Event-aware congestion** — the enriched XGBoost model "
+            f"(citywide event features) estimates today's {len(events)} events "
+            f"({len(large_events)} major) lift expected congestion by "
+            f"**{evt_uplift['delta']:+.2f} levels** at {now.hour:02d}:00 "
+            f"(no-event baseline {evt_uplift['no_events']:.2f} → "
+            f"{evt_uplift['with_events']:.2f}/3).")
+    elif traffic.get("available") and traffic.get("model_enriched") is None:
+        st.caption(
+            "📅 Congestion here is a historical hour average — it does **not** "
+            "yet fold in today's events. Train the event-aware model "
+            "(`13_enrich_events.py --retrain`) to enable the live event uplift.")
 
     st.write("")
 
