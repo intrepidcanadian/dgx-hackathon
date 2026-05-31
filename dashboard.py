@@ -1327,10 +1327,44 @@ with tab_traffic:
     # AI summary appears here at the top; filled from context computed below
     ai_slot_traffic = st.container()
 
-    # VLM live status
-    if traffic.get("hermes"):
-        hermes_data = traffic["hermes"]
+    # VLM live status — built from the CUMULATIVE history (newest reading per
+    # camera across all sweeps), not just the latest single sweep. last_state
+    # holds only ~50 cameras/sweep; vlm_history accumulates toward all 336.
+    hermes_data = {}
+    vh = traffic.get("vlm_history")
+    if (vh is not None and len(vh)
+            and {"location", "congestion_level"}.issubset(vh.columns)):
+        h = vh.dropna(subset=["location"]).copy()
+        h["_ts"] = pd.to_datetime(h.get("timestamp"), errors="coerce")
+        h = h.sort_values("_ts")
+        for loc, g in h.groupby("location"):
+            last = g.iloc[-1]
+            lvl = last.get("congestion_level")
+            hermes_data[str(loc)] = {
+                "level": int(lvl) if pd.notna(lvl) else -1,
+                "flow": last.get("flow", "?"),
+                "timestamp": (last["_ts"].isoformat()
+                              if pd.notna(last["_ts"]) else "?"),
+            }
+    # Overlay the latest sweep (last_state.json), newest wins.
+    for loc, rec in (traffic.get("hermes") or {}).items():
+        if not isinstance(rec, dict):
+            continue
+        prev = hermes_data.get(str(loc))
+        rec_ts = str(rec.get("timestamp", ""))
+        if prev is None or rec_ts >= str(prev.get("timestamp", "")):
+            hermes_data[str(loc)] = {
+                "level": rec.get("level", -1),
+                "flow": rec.get("flow", "?"),
+                "timestamp": rec_ts or "?",
+            }
+
+    if hermes_data:
         st.subheader("Latest Camera Analysis")
+        st.caption(
+            f"Cumulative across all sweeps · {len(hermes_data)} of 336 cameras "
+            f"analyzed so far (newest reading per camera). Coverage grows each "
+            f"cycle as the VLM rotates through the network.")
 
         # Count congestion levels
         levels = {"🟢 Clear": 0, "🟡 Normal": 0, "🟠 Heavy": 0, "🔴 Gridlock": 0}
@@ -1378,12 +1412,13 @@ with tab_traffic:
                       delta=f"{live_now - typ_now:+.1f} vs model",
                       delta_color="inverse",
                       help=f"Live average across {len(live_lvls)} cameras "
-                           f"analyzed this sweep.")
+                           f"analyzed so far (cumulative, newest per camera).")
             _gap = live_now - typ_now
             _word = ("heavier than" if _gap > 0.3 else
                      "lighter than" if _gap < -0.3 else "in line with")
-            d3.metric("Cameras analyzed", len(live_lvls),
-                      help="Updates every VLM sweep as more cameras are read.")
+            d3.metric("Cameras analyzed", f"{len(live_lvls)} / 336",
+                      help="Cumulative coverage; grows each cycle as the VLM "
+                           "rotates through the camera network.")
             st.caption(
                 f"Live camera video says traffic is **{_word}** the typical "
                 f"pattern for this hour ({live_now:.1f}/3 vs {typ_now:.1f}/3). "
