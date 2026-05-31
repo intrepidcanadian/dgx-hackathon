@@ -790,46 +790,6 @@ def event_route_impact(sim, from_loc, to_loc, path_coords=None):
         return 0.0, None
 
 
-ROUTE_HIST_FILE = TRAFFIC_STATE / "route_score_history.json"
-
-
-def log_route_score(route_key, live, typical, min_gap_s=45, cap=240):
-    """Append a (live, typical) sample for a route, throttled to one per
-    `min_gap_s` and capped at `cap` points. Persists across refreshes so the
-    dashboard can plot how the live score drifts from the hourly baseline as
-    new camera sweeps land. Returns the route's series."""
-    try:
-        data = {}
-        if ROUTE_HIST_FILE.exists():
-            with open(ROUTE_HIST_FILE) as f:
-                data = json.load(f)
-        series = data.get(route_key, [])
-        now = _time.time()
-        if series and (now - series[-1].get("t", 0)) < min_gap_s:
-            return series
-        series.append({"t": now, "live": round(float(live), 3),
-                       "typ": round(float(typical), 3)})
-        series = series[-cap:]
-        data[route_key] = series
-        ROUTE_HIST_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(ROUTE_HIST_FILE, "w") as f:
-            json.dump(data, f)
-        return series
-    except Exception:
-        return []
-
-
-def load_route_history(route_key):
-    """Read the persisted (live, typical) samples for a route."""
-    try:
-        if ROUTE_HIST_FILE.exists():
-            with open(ROUTE_HIST_FILE) as f:
-                return json.load(f).get(route_key, [])
-    except Exception:
-        pass
-    return []
-
-
 def make_route_map(from_loc, to_loc, from_name, to_name,
                    camera_df=None, events=None, height=460, path_coords=None):
     """Map showing commute origin/destination with the route + congestion.
@@ -2116,29 +2076,6 @@ with tab_commute:
         live_drive = _drive_min(route_cong)
         delta_min = live_drive - typ_drive
         lvl_now = (live_level if live_level is not None else _base_cong) + eff_event
-
-        # Track the route's live score vs the hourly baseline over time so you
-        # can watch how each new camera sweep shifts it (persists to disk).
-        route_key = f"{from_name} → {to_name}"
-        if live_level is not None:
-            log_route_score(route_key, live_level, typ_cong)
-        _rhist = load_route_history(route_key)
-        if len(_rhist) >= 2:
-            st.markdown('<div class="cc-panel-title" style="margin-top:8px">'
-                        '📈 Route score vs typical · over time</div>',
-                        unsafe_allow_html=True)
-            _hdf = pd.DataFrame(_rhist)
-            _hdf["Time"] = pd.to_datetime(_hdf["t"], unit="s")
-            _hdf = _hdf.rename(columns={"live": "Live route",
-                                        "typ": "Typical (this hour)"})
-            st.line_chart(
-                _hdf.set_index("Time")[["Live route", "Typical (this hour)"]],
-                color=["#00e676", "#7d8da3"], height=220)
-            st.caption(
-                "Live route congestion (green) vs the historical baseline for "
-                "the current hour (grey), 0–3 scale. The baseline is flat "
-                "within an hour; the green line moves as each VLM sweep updates "
-                "the route — that gap is what fresh video is changing.")
 
         if run_commute:
             results = []
