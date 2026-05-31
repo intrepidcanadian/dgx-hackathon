@@ -656,6 +656,8 @@ def make_command_map(camera_df=None, event_list=None, restriction_df=None,
     # ---- Incident pins (text/icon style) ----
     if incident_df is not None and len(incident_df) > 0:
         idf = incident_df.dropna(subset=["lat", "lon"]).copy()
+        if "label" not in idf.columns:
+            idf["label"] = "Incident"
         layers.append(pdk.Layer(
             "ScatterplotLayer",
             data=idf,
@@ -1248,7 +1250,9 @@ with tab_overview:
 
         # Incident pins with coords
         inc_pts = pd.DataFrame(
-            [{"lat": i["lat"], "lon": i["lon"]} for i in incidents
+            [{"lat": i["lat"], "lon": i["lon"],
+              "label": i.get("title", "Incident"),
+              "where": i.get("where", "")} for i in incidents
              if i.get("lat") is not None]
         )
 
