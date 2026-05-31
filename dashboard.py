@@ -344,6 +344,95 @@ def load_live_state():
     return out
 
 
+# Canonical diurnal load curves — fraction of a road's OWN peak hour by
+# hour-of-day. The City's count summary gives each road a measured daily
+# volume + AM/PM peaks but not a full hourly series, so we use these standard
+# urban shapes (anchored at typical 8am / 5pm weekday peaks, a flatter midday
+# weekend peak) to turn "how busy is this road normally at hour H" into a
+# 0-1 expectation. Scored against the live VLM level to flag anomalies.
+DIURNAL_WEEKDAY = {0: .05, 1: .03, 2: .02, 3: .02, 4: .04, 5: .10, 6: .30,
+                   7: .70, 8: 1.0, 9: .75, 10: .60, 11: .62, 12: .65, 13: .64,
+                   14: .66, 15: .78, 16: .92, 17: 1.0, 18: .85, 19: .60,
+                   20: .45, 21: .35, 22: .25, 23: .12}
+DIURNAL_WEEKEND = {0: .10, 1: .07, 2: .05, 3: .03, 4: .03, 5: .05, 6: .10,
+                   7: .18, 8: .30, 9: .45, 10: .62, 11: .75, 12: .85, 13: .92,
+                   14: 1.0, 15: .98, 16: .92, 17: .85, 18: .75, 19: .62,
+                   20: .50, 21: .40, 22: .30, 23: .18}
+
+
+@st.cache_data(ttl=3600)
+def load_camera_baseline():
+    """Per-camera measured baseline from the City's count stations.
+
+    Built offline by traffic/scripts/16_camera_baseline.py, which matches each
+    camera to its nearest midblock count station (median ~40 m) and stores that
+    station's measured volume + speed profile. Indexed by loc_key so the Live
+    Cameras tab can score each VLM read against what the road normally carries.
+    Returns None if the baseline hasn't been built yet."""
+    f = TRAFFIC_DATA / "processed" / "camera_baseline.parquet"
+    if not f.exists():
+        return None
+    try:
+        df = pd.read_parquet(f)
+        return df.drop_duplicates("loc_key").set_index("loc_key")
+    except Exception:
+        return None
+
+
+def _road_class(daily_vol):
+    """Coarse road class from measured daily volume (veh/day)."""
+    try:
+        v = float(daily_vol)
+    except (TypeError, ValueError):
+        return "—"
+    if v >= 50000:
+        return "expressway"
+    if v >= 30000:
+        return "major arterial"
+    if v >= 15000:
+        return "minor arterial"
+    if v >= 5000:
+        return "collector"
+    return "local road"
+
+
+def baseline_score(base_row, hour, level, is_weekend):
+    """Compare a live VLM congestion level to the road's measured typical load.
+
+    `base_row` is one row of the camera baseline (dict). Returns a verdict dict
+    or None. The comparison is a heuristic: it maps the road's measured peak
+    onto a standard diurnal curve to get an expected 0-1 busyness for this hour,
+    maps the VLM level (0-3) to a 0-1 observed busyness, and reports the gap.
+    It is an anomaly indicator ("busier than this road normally is now"), not a
+    claim of equal physical units."""
+    if base_row is None or level is None or level < 0:
+        return None
+    curve = DIURNAL_WEEKEND if is_weekend else DIURNAL_WEEKDAY
+    expected = curve.get(int(hour), 0.5)
+    obs = max(0.0, min(1.0, float(level) / 3.0))
+    delta = obs - expected
+    if delta >= 0.45:
+        verdict, icon = "much busier than typical", "🔴"
+    elif delta >= 0.18:
+        verdict, icon = "busier than typical", "🟠"
+    elif delta <= -0.45:
+        verdict, icon = "much quieter than typical", "🟢"
+    elif delta <= -0.18:
+        verdict, icon = "quieter than typical", "🟢"
+    else:
+        verdict, icon = "about typical", "⚪"
+    return {
+        "expected": expected, "observed": obs, "delta": delta,
+        "verdict": verdict, "icon": icon,
+        "road_class": _road_class(base_row.get("daily_vol")),
+        "daily_vol": base_row.get("daily_vol"),
+        "avg_speed": base_row.get("avg_speed"),
+        "p85_speed": base_row.get("p85_speed"),
+        "dist_m": base_row.get("station_dist_m"),
+        "station": base_row.get("station_name"),
+    }
+
+
 @st.cache_data(ttl=5)
 def load_hardware_stats():
     """Live host stats, refreshed every 5s.
@@ -1549,6 +1638,20 @@ with tab_cameras:
         "successive sweeps analyze more cameras."
     )
 
+    # Measured per-camera baseline (City count stations) for scoring the VLM
+    # read against what each road normally carries. None until script 16 runs.
+    cam_baseline = load_camera_baseline()
+    _now = datetime.now()
+    _now_hr, _is_wknd = _now.hour, _now.weekday() >= 5
+    if cam_baseline is not None:
+        st.caption(
+            f"🧭 Each VLM read is scored against the road's **measured** "
+            f"typical load — every camera is matched to its nearest City "
+            f"traffic-count station ({len(cam_baseline)} matched, median ~40 m "
+            f"away) — so you see *busier / quieter than this road normally is "
+            f"at this hour*, not just an absolute level."
+        )
+
     # AI summary at the top; filled from context computed below
     ai_slot_cameras = st.container()
 
@@ -1680,6 +1783,21 @@ with tab_cameras:
                                     extra.append(str(rec["flow"]))
                                 suffix = f" · {' · '.join(extra)}" if extra else ""
                                 st.caption(f"{LEVEL_LABELS.get(lvl, lvl)}{suffix}")
+                                # Score against the road's measured baseline
+                                brow = None
+                                if (cam_baseline is not None
+                                        and cam["loc_key"] in cam_baseline.index):
+                                    brow = cam_baseline.loc[cam["loc_key"]].to_dict()
+                                sc = baseline_score(brow, _now_hr, lvl, _is_wknd)
+                                if sc:
+                                    ctx = [sc["road_class"]]
+                                    if pd.notna(sc["daily_vol"]):
+                                        ctx.append(f"~{sc['daily_vol']/1000:.0f}k/day")
+                                    if pd.notna(sc.get("avg_speed")):
+                                        ctx.append(f"typ {sc['avg_speed']:.0f} km/h")
+                                    st.caption(
+                                        f"{sc['icon']} **{sc['verdict']}** · "
+                                        f"{' · '.join(ctx)}")
                             else:
                                 st.caption("⚪ Not yet analyzed")
 
