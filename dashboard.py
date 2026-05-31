@@ -716,24 +716,27 @@ def route_live_congestion(vlm_history, from_loc, to_loc, path_coords=None,
     Uses the most recent observation per camera in vlm_history, keeps the ones
     within `radius_km` of the route geometry (the OSRM path if available, else
     the straight start→end line sampled into points), and returns
-    (mean_level, n_cameras). Returns (None, 0) if no live cameras are on route.
+    (mean_level, n_cameras, n_total) where n_total is how many distinct cameras
+    have a live reading anywhere (so callers can show "N of TOTAL on route").
+    Returns (None, 0, n_total) if no live cameras are on route.
 
     This is what lets fresh camera video actually move the commute estimate:
     historical averages give the baseline, these cameras say what's happening
     *right now* on the specific roads you'd drive."""
     try:
         if vlm_history is None or len(vlm_history) == 0:
-            return None, 0
+            return None, 0, 0
         cols = {"lat", "lon", "congestion_level"}
         if not cols.issubset(vlm_history.columns):
-            return None, 0
+            return None, 0, 0
 
         vh = vlm_history.dropna(subset=["lat", "lon", "congestion_level"]).copy()
         if "location" in vh.columns and "timestamp" in vh.columns:
             vh = (vh.sort_values("timestamp")
                     .drop_duplicates("location", keep="last"))
         if len(vh) == 0:
-            return None, 0
+            return None, 0, 0
+        n_total = len(vh)
 
         # Build sample points along the route to measure distance against.
         if path_coords:
@@ -751,10 +754,10 @@ def route_live_congestion(vlm_history, from_loc, to_loc, path_coords=None,
             if dmin <= radius_km:
                 on_route.append(float(cam["congestion_level"]))
         if not on_route:
-            return None, 0
-        return sum(on_route) / len(on_route), len(on_route)
+            return None, 0, n_total
+        return sum(on_route) / len(on_route), len(on_route), n_total
     except Exception:
-        return None, 0
+        return None, 0, 0
 
 
 # Post-event egress timeline (minutes after start -> impact multiplier).
@@ -2039,7 +2042,7 @@ with tab_commute:
         # Live camera congestion on this specific route (drives the
         # "leave now" adjustment below). Computed regardless of button press
         # so the comparison panel can render.
-        live_level, n_live = route_live_congestion(
+        live_level, n_live, n_total_live = route_live_congestion(
             traffic.get("vlm_history"), from_loc, to_loc, path_coords=route_path)
 
         # Drive-time model: scale the REAL free-flow time (OSRM duration, or
@@ -2158,8 +2161,9 @@ with tab_commute:
 
                 _src = []
                 if live_level is not None:
-                    _src.append(f"{n_live} live camera(s) reading "
-                                f"{live_level:.1f}/3")
+                    _src.append(f"{n_live} of {n_total_live} live cameras "
+                                f"sitting on this route (within 0.8 km) "
+                                f"reading {live_level:.1f}/3")
                 if eff_event > 0:
                     _src.append(f"a simulated event adding +{eff_event:.1f} "
                                 f"at T+{event_off} min")
