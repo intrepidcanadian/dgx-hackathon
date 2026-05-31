@@ -1386,6 +1386,13 @@ with tab_overview:
             "📅 Congestion here is a historical hour average — it does **not** "
             "yet fold in today's events. Train the event-aware model "
             "(`13_enrich_events.py --retrain`) to enable the live event uplift.")
+    elif traffic.get("available"):
+        st.caption(
+            f"📅 **Traffic Now** is the historical average congestion for "
+            f"{now.hour:02d}:00 ({avg_cong:.1f}/3) across all intersections. "
+            f"The event-aware model found no congestion uplift from today's "
+            f"{len(events)} listed events, so the score is the pattern alone. "
+            f"See the Architecture tab for the full derivation.")
 
     st.write("")
 
@@ -2385,7 +2392,7 @@ with tab_commute:
 
         if run_commute:
             results = []
-            for hour in range(6, 21):
+            for hour in range(24):
                 time_slice = test[
                     (test["hour"] == hour) &
                     (test["day_of_week"] == plan_dow_val)
@@ -2399,7 +2406,7 @@ with tab_commute:
                     "Hour": f"{hour:02d}:00",
                     "Congestion": round(hcong, 2),
                     "Drive (min)": round(dmin, 0),
-                    "Arrival": f"{hour + int(dmin) // 60:02d}:"
+                    "Arrival": f"{(hour + int(dmin) // 60) % 24:02d}:"
                                f"{int(dmin) % 60:02d}",
                 })
             results_df = pd.DataFrame(results)
@@ -2562,18 +2569,19 @@ with tab_commute:
                     return (line + pt).properties(height=240)
                 return line.properties(height=240)
 
-            cc1, cc2 = st.columns(2)
-            with cc1:
-                st.altair_chart(_curve("typ_min", "live_min", "#ff4b5c",
-                                       "Drive (min)"), use_container_width=True)
-                st.caption("Drive time by departure hour (red = typical curve). "
-                           "Green dot = live-adjusted estimate for leaving now.")
-            with cc2:
-                st.altair_chart(_curve("typ_cong", "live_cong", "#ffa600",
-                                       "Congestion (0–3)"),
-                                use_container_width=True)
-                st.caption("Congestion (0–3) by hour (orange = typical). "
-                           "Green dot = what cameras say right now.")
+            # Stacked vertically: drive time on top, congestion directly below
+            # (shared 24-hour x-axis so the two curves line up hour-for-hour).
+            st.altair_chart(_curve("typ_min", "live_min", "#ff4b5c",
+                                   "Drive (min)"), use_container_width=True)
+            st.caption("Drive time by departure hour, all 24 hours "
+                       "(red = typical curve). "
+                       "Green dot = live-adjusted estimate for leaving now.")
+            st.altair_chart(_curve("typ_cong", "live_cong", "#ffa600",
+                                   "Congestion (0–3)"),
+                            use_container_width=True)
+            st.caption("Congestion (0–3) by the same departure hour "
+                       "(orange = typical). "
+                       "Green dot = what cameras say right now.")
 
             if has_live:
                 _vs = ("above" if now_drive - typ_now_drive > 0.5 else
@@ -3426,5 +3434,81 @@ with tab_arch:
         '(today\'s events vs none) shown on the Command Center, and <b>weather</b> '
         'columns drive the analysis-only correlations on the Weather Impact '
         'panel.</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="cc-panel-title" style="margin-top:14px">'
+                '🧮 How the Congestion Score is derived — step by step</div>',
+                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="cc-panel"><div style="color:#cfe9d8;font-size:.88rem;'
+        'line-height:1.6">'
+
+        '<b style="color:#00e676">1 · Base score — "what is normal here, now"</b><br>'
+        'The Command Center\'s <b>Traffic Now</b> starts as the <b>historical '
+        'average congestion level (0–3) for the current hour</b>, taken across all '
+        'intersections in <code>test.parquet</code>. Those levels come from the '
+        'Multimodal Turning Movement Counts (<code>262469c2…</code>): each '
+        'intersection\'s own 15-min volume is binned into quartiles, so "level 2" '
+        'means <i>busier than 75% of this intersection\'s own history at this '
+        'time</i>. No live feed is needed — this is the pure time-of-day pattern.'
+        '<br><br>'
+
+        '<b style="color:#00e676">2 · Events &amp; road restrictions — how today '
+        'bends the curve</b><br>'
+        'The event-aware XGBoost model (39 features = 30 base + 6 citywide event + '
+        '3 road-restriction) is run <b>twice</b> on the current-hour population: '
+        'once with today\'s real event features (count, # major, geographic spread '
+        '— from the Special Events feed <code>e9f77756…</code>) and once with them '
+        '<b>zeroed</b>. The difference is a <b>held-fixed counterfactual uplift</b> '
+        '— purely the events\' effect, because every other feature is identical and '
+        'cancels. That delta is added to the base score and surfaced as '
+        '"+0.x from events". Active <b>road restrictions</b> (closures/construction '
+        'counts) ride in the same feature set, so an unusually restricted day moves '
+        'the same uplift.<br><br>'
+
+        '<b style="color:#00e676">3 · Live camera read — estimated (baseline) vs '
+        'live (gemma3)</b><br>'
+        'gemma3 reads each camera frame and returns an <b>absolute</b> level 0–3 — '
+        'but 30 cars is gridlock on a side street and free-flow on the Gardiner. To '
+        'make it meaningful we compare against the <b>measured baseline</b>: every '
+        'camera is matched to its nearest City count station '
+        '(<code>e90038e7…</code>, median ~40 m). The station\'s measured peak '
+        'volume is mapped onto a standard diurnal curve to get the road\'s '
+        '<b>expected</b> busyness for this hour; gemma3\'s level maps to '
+        '<b>observed</b> busyness. The gap is reported per camera as '
+        '🔴 much busier / 🟠 busier / ⚪ about typical / 🟢 quieter than this road '
+        'normally is — that is the "estimated vs live now" read on the Live Cameras '
+        'tab.<br><br>'
+
+        '<b style="color:#00e676">4 · Weather — context, not yet a model input</b><br>'
+        'Weather (Open-Meteo ERA5) is <b>analysis-only today</b>: temp / precip / '
+        'snow / wind columns are joined to <code>test.parquet</code> by date+hour '
+        'and correlated with congestion on the Weather Impact panel. They are '
+        'deliberately <b>not</b> in <code>feature_cols.json</code>, so they do '
+        '<b>not</b> change any prediction or the Congestion Score — the trained '
+        'models never see them. Promoting them to real model features is a '
+        'retrain-gated next step.<br><br>'
+
+        '<b style="color:#00e676">5 · What-If Event Simulator — non-listed / '
+        'hypothetical events</b><br>'
+        'For events that are <b>not</b> in the city feed, the simulator builds '
+        'impact <b>parametrically</b> rather than from the enriched model: choose '
+        'type / location / crowd / hour, and every camera within the event\'s reach '
+        'gets <code>baseline + impact</code>, where '
+        '<code>impact = base_impact(type) × crowd_factor</code> and decays linearly '
+        'from a <b>peak radius</b> (full impact) to a <b>decay radius</b> (zero). An '
+        'egress time-curve animates the 2-hour aftermath. This is a physics-style '
+        'what-if layered on the historical baseline, independent of the real-events '
+        'uplift in step 2.<br><br>'
+
+        '<b style="color:#7d8da3">Note on the live indicator:</b> the pulsing '
+        '<b style="color:#00e676">green dot</b> in the Command Center header means '
+        'the VLM orchestrator is actively sweeping cameras on the Spark; it turns '
+        '<b style="color:#ff4b5c">red ("VLM FEED IDLE")</b> when no sweep is '
+        'running. The Congestion Score itself does <b>not</b> require the live feed '
+        '— with the feed idle it falls back to the historical + event-aware '
+        'estimate (steps 1–2).'
+        '</div></div>',
         unsafe_allow_html=True,
     )
