@@ -1445,33 +1445,15 @@ with tab_overview:
                 <span class="cc-badge {inc['sev']}">{inc['sev'].upper()}</span></div>
             </div>""", unsafe_allow_html=True)
 
-        # AI incident brief (rule-based, runs on local model story)
+        # Incident brief — surfaces the top live signal (real event/traffic
+        # data). No templated recommendations and no heuristic confidence score.
         top = incidents[0]
-        actions = []
-        if top["kind"] == "Traffic" or avg_cong >= 2:
-            actions = ["Increase TTC frequency on core lines",
-                       "Deploy signal-timing adjustments on arterials",
-                       "Push commute-optimizer alerts to subscribers"]
-        elif top["kind"] == "Event":
-            actions = ["Pre-position crowd management near venue",
-                       "Adjust streetcar headways on adjacent routes",
-                       "Monitor transit transfer loads post-event"]
-        else:
-            actions = ["Maintain standard monitoring cadence",
-                       "Continue 15-min VLM camera sweeps"]
-        conf = (traffic.get("nowcast") or {}).get("predicted_avg")
-        conf_txt = f"{min(0.95, 0.6 + (conf or 0) * 0.12):.2f}" if conf is not None else "0.82"
         st.markdown(f"""
         <div class="cc-panel">
           <div class="cc-panel-title">🤖 AI Incident Brief</div>
           <div style="color:#e6edf3;font-weight:600;font-size:.9rem">{top['title']}</div>
-          <div style="color:#7d8da3;font-size:.8rem;margin:6px 0 10px">
-            {top['where']}. Generated locally on DGX Spark — no data leaves device.</div>
-          <div style="color:#7d8da3;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase">
-            Recommended Actions</div>
-          {''.join(f'<div style="color:#cfe9d8;font-size:.84rem;margin-top:5px">✓ {a}</div>' for a in actions)}
-          <div style="margin-top:10px;color:#7d8da3;font-size:.78rem">
-            Confidence <b style="color:#00e676">{conf_txt}</b></div>
+          <div style="color:#7d8da3;font-size:.8rem;margin:6px 0 4px">
+            {top['where']} · {top['kind']}. Generated locally on DGX Spark — no data leaves device.</div>
         </div>""", unsafe_allow_html=True)
 
     # ===== CENTER: live heatmap =====
