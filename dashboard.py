@@ -3236,7 +3236,7 @@ with tab_arch:
         {"Dataset (Toronto Open Data)": "Open-Meteo ERA5 archive (not Toronto OD)",
          "CKAN resource id": "archive-api.open-meteo.com",
          "What it provides": "Historical hourly temp / precip / snow / wind / visibility",
-         "Feeds": "Weather Impact analysis (18_enrich_weather.py)"},
+         "Feeds": "Base congestion model + Weather Impact panel (18_enrich_weather.py)"},
     ])
     st.dataframe(data_tbl, hide_index=True, width='stretch')
     st.caption(
@@ -3398,7 +3398,7 @@ with tab_arch:
         "                   │      road normally is'        ┘       road graph, +1..+4h\n"
         "                   │\n"
         "  event-aware model (13) ── counterfactual uplift ──► added on Command Center\n"
-        "  weather (18) ──── analysis-only correlations ─────► Weather Impact panel",
+        "  weather (18) ──── promoted features ─────► base XGBoost (02) + Weather panel",
         language="text",
     )
     st.markdown(
@@ -3411,11 +3411,12 @@ with tab_arch:
         '<b>VLM nowcast</b> combines the live state with patterns to predict the '
         'next sweep (t→t+1), while the <b>STGNN</b> propagates congestion across '
         'the learned road graph for a multi-horizon (+1…+4h) timeline. Two side '
-        'channels adjust the picture without retraining the base model: the '
+        'channels adjust the picture: the '
         '<b>event-aware model</b> contributes a held-fixed counterfactual uplift '
-        '(today\'s events vs none) shown on the Command Center, and <b>weather</b> '
-        'columns drive the analysis-only correlations on the Weather Impact '
-        'panel.</div>',
+        '(today\'s events vs none) shown on the Command Center, and a curated set '
+        'of <b>weather</b> columns is promoted into the base model\'s feature set '
+        'so rain / snow / low-visibility hours feed the prediction directly (the '
+        'remaining weather columns still drive the Weather Impact panel).</div>',
         unsafe_allow_html=True,
     )
 
@@ -3463,14 +3464,20 @@ with tab_arch:
         'normally is — that is the "estimated vs live now" read on the Live Cameras '
         'tab.<br><br>'
 
-        '<b style="color:#00e676">4 · Weather — context, not yet a model input</b><br>'
-        'Weather (Open-Meteo ERA5) is <b>analysis-only today</b>: temp / precip / '
-        'snow / wind columns are joined to <code>test.parquet</code> by date+hour '
-        'and correlated with congestion on the Weather Impact panel. They are '
-        'deliberately <b>not</b> in <code>feature_cols.json</code>, so they do '
-        '<b>not</b> change any prediction or the Congestion Score — the trained '
-        'models never see them. Promoting them to real model features is a '
-        'retrain-gated next step.<br><br>'
+        '<b style="color:#00e676">4 · Weather — now a real model input</b><br>'
+        'Weather (Open-Meteo ERA5) is joined to <code>train/test.parquet</code> '
+        'by date+hour, and a curated subset — <code>temp_c, precip_mm, snow_mm, '
+        'wind_kph, humidity, visibility, rain_flag</code> — is promoted into '
+        '<code>feature_cols.json</code> (step 18 of the pipeline). The XGBoost '
+        'congestion + volume models are <b>trained with these columns</b>, so '
+        'rain / snow / low-visibility hours can move the predicted Congestion '
+        'Score. In practice the lift is small: time-of-day and per-location '
+        'history dominate feature importance, with weather a secondary signal. '
+        'The remaining weather columns (feels_like, wind direction, seasonal '
+        'flags) stay analysis-only and feed the Weather Impact correlation '
+        'panel. Re-run <code>18_enrich_weather.py</code> then '
+        '<code>02_train_model.py</code> (or <code>pipeline.py data</code> + '
+        '<code>train</code>) to refresh.<br><br>'
 
         '<b style="color:#00e676">5 · What-If Event Simulator — non-listed / '
         'hypothetical events</b><br>'

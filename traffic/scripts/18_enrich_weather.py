@@ -16,17 +16,22 @@ joined to every location at that time.
 
 SCOPE
 -----
-These columns are *analysis-only*: they are NOT added to feature_cols.json, so
-the already-trained XGBoost model (which expects its original feature set) is
-untouched. The dashboard's weather panel reads the columns directly off
-test.parquet to compute correlations. A future retrain could promote them to
-real model features.
+A curated subset of these columns (see PROMOTED_FEATURES) is promoted to real
+model inputs: this script appends them to feature_cols.json so the next run of
+02_train_model.py trains the congestion/volume models *with* weather. Run order
+in the pipeline guarantees this happens before training (stage_data → 18 →
+stage_train → 02). The remaining columns (e.g. feels_like, wind direction)
+stay analysis-only for the dashboard's Weather Impact correlation panel.
+
+Re-running this script is idempotent: it strips its own columns from the
+parquet before re-merging, and de-dupes feature_cols.json before appending.
 
 OUTPUT
 ------
 Rewrites data/processed/{train,test}.parquet in place with added columns:
   temp_c, humidity, feels_like, precip_mm, snow_mm, wind_kph, visibility,
   wind_dir_sin, wind_dir_cos, rain_flag, is_winter, is_summer
+and appends PROMOTED_FEATURES to data/processed/feature_cols.json.
 
 USAGE
 -----
@@ -46,6 +51,18 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 PROC_DIR = DATA_DIR / "processed"
 TRAIN_FILE = PROC_DIR / "train.parquet"
 TEST_FILE = PROC_DIR / "test.parquet"
+FEATURE_COLS_FILE = PROC_DIR / "feature_cols.json"
+
+# Weather columns promoted to real XGBoost inputs (appended to feature_cols.json
+# so 02_train_model.py trains with them). Curated to avoid redundancy: temp_c
+# already implies feels_like; month/month_sin/cos already encode season, so
+# is_winter/is_summer are dropped; wind *direction* carries little signal for
+# citywide congestion so only wind *speed* is kept. XGBoost's hist tree method
+# handles the NaNs on hours with no weather match natively.
+PROMOTED_FEATURES = [
+    "temp_c", "precip_mm", "snow_mm", "wind_kph",
+    "humidity", "visibility", "rain_flag",
+]
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
@@ -162,6 +179,39 @@ def enrich_file(path, wx):
           f"({matched / max(len(merged), 1):.0%}); added {len(wcols)} columns.")
 
 
+def promote_features():
+    """Append PROMOTED_FEATURES to feature_cols.json so the next 02_train_model
+    run trains with weather. Idempotent: only adds promoted cols that (a) are
+    actually present in train+test parquet and (b) aren't already listed."""
+    import json
+
+    if not FEATURE_COLS_FILE.exists():
+        print(f"  ! {FEATURE_COLS_FILE.name} not found — cannot promote weather "
+              f"features. Run 01_prepare_traffic_data.py first.")
+        return
+    if not (TRAIN_FILE.exists() and TEST_FILE.exists()):
+        print("  ! train/test parquet missing — skipping feature promotion.")
+        return
+
+    train_cols = set(pd.read_parquet(TRAIN_FILE).columns)
+    test_cols = set(pd.read_parquet(TEST_FILE).columns)
+    available = [c for c in PROMOTED_FEATURES
+                 if c in train_cols and c in test_cols]
+
+    with open(FEATURE_COLS_FILE) as f:
+        feats = json.load(f)
+    added = [c for c in available if c not in feats]
+    if not added:
+        print(f"  feature_cols.json already includes weather features "
+              f"({[c for c in available]}); nothing to promote.")
+        return
+    feats.extend(added)
+    with open(FEATURE_COLS_FILE, "w") as f:
+        json.dump(feats, f)
+    print(f"  promoted {len(added)} weather features to feature_cols.json: "
+          f"{added} (now {len(feats)} features total).")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--lat", type=float, default=DEFAULT_LAT)
@@ -194,8 +244,13 @@ def main():
     print("Merging weather onto train/test...")
     enrich_file(TRAIN_FILE, wx)
     enrich_file(TEST_FILE, wx)
-    print("Done. The dashboard's Weather Impact Analysis will populate on next "
-          "load (clear cache / Rerun).")
+
+    print("Promoting weather to model features...")
+    promote_features()
+
+    print("Done. Re-run 02_train_model.py to train with weather, then the "
+          "dashboard's congestion models + Weather Impact panel both use it "
+          "(clear cache / Rerun).")
 
 
 if __name__ == "__main__":
