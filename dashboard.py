@@ -2876,13 +2876,18 @@ with tab_analytics:
 
         if traffic["available"]:
             test_df = traffic["test"]
+            # Binary congestion target — the prepare script names it
+            # `is_congested`; tolerate the older `congestion_binary` name too.
+            tgt_col = ("congestion_binary" if "congestion_binary" in test_df.columns
+                       else "is_congested" if "is_congested" in test_df.columns
+                       else None)
             weather_in_traffic = [f for f in weather_features
                                   if f in test_df.columns]
-            if weather_in_traffic and "congestion_binary" in test_df.columns:
+            if weather_in_traffic and tgt_col:
                 for feat in weather_in_traffic:
                     if test_df[feat].std() > 0:
                         corr = test_df[feat].corr(
-                            test_df["congestion_binary"].astype(float))
+                            test_df[tgt_col].astype(float))
                         weather_imp_data.append({
                             "Feature": feat,
                             "Project": "Traffic",

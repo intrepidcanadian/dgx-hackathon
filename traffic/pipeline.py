@@ -128,6 +128,9 @@ def stage_data(gpu: bool, cont: bool):
     run("17_camera_baseline", cont=cont)
     run("08_enrich_traffic_data", cont=cont)
     run("13_enrich_events", cont=cont)
+    # Join historical hourly weather (Open-Meteo ERA5) onto train/test so the
+    # Analytics "Weather Impact" panel has real weather columns to correlate.
+    run("18_enrich_weather", cont=cont)
 
 
 def stage_train(gpu: bool, epochs: int, cont: bool):
