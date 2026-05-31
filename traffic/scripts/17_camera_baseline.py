@@ -28,8 +28,8 @@ within MAX_DIST_KM, keyed by loc_key ("MAINROAD & CROSSROAD").
 
 USAGE
 -----
-  python3 traffic/scripts/16_camera_baseline.py
-  python3 traffic/scripts/16_camera_baseline.py --max-dist-km 0.4
+  python3 traffic/scripts/17_camera_baseline.py
+  python3 traffic/scripts/17_camera_baseline.py --max-dist-km 0.4
 """
 import argparse
 import sys

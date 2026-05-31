@@ -364,7 +364,7 @@ DIURNAL_WEEKEND = {0: .10, 1: .07, 2: .05, 3: .03, 4: .03, 5: .05, 6: .10,
 def load_camera_baseline():
     """Per-camera measured baseline from the City's count stations.
 
-    Built offline by traffic/scripts/16_camera_baseline.py, which matches each
+    Built offline by traffic/scripts/17_camera_baseline.py, which matches each
     camera to its nearest midblock count station (median ~40 m) and stores that
     station's measured volume + speed profile. Indexed by loc_key so the Live
     Cameras tab can score each VLM read against what the road normally carries.

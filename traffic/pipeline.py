@@ -122,6 +122,10 @@ def ensure_dirs():
 def stage_data(gpu: bool, cont: bool):
     step("Data — pull from CKAN, engineer features, enrich")
     run("01_prepare_traffic_data", gpu=gpu, cont=cont)
+    # Per-camera measured baseline from City midblock count stations — the
+    # ground truth each live VLM read is scored against (busier/quieter than
+    # typical + typical speed). Produces data/processed/camera_baseline.parquet.
+    run("17_camera_baseline", cont=cont)
     run("08_enrich_traffic_data", cont=cont)
     run("13_enrich_events", cont=cont)
 
