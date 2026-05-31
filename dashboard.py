@@ -757,6 +757,79 @@ def route_live_congestion(vlm_history, from_loc, to_loc, path_coords=None,
         return None, 0
 
 
+def event_route_impact(sim, from_loc, to_loc, path_coords=None):
+    """Added congestion levels a simulated event imposes on a route.
+
+    Uses the same distance-decay profile as the What-If simulator (at peak),
+    measured against the closest the route comes to the event epicentre.
+    Returns (max_added_levels, nearest_km); (0.0, None) if no active sim."""
+    try:
+        if not sim:
+            return 0.0, None
+        elat, elon = sim["lat"], sim["lon"]
+        pr = sim["params"]["peak_radius"]
+        dr = sim["params"]["decay_radius"]
+        impact = sim["impact"]
+        if path_coords:
+            pts = [(c[1], c[0]) for c in path_coords]
+        else:
+            steps = 24
+            pts = [(from_loc[0] + (to_loc[0] - from_loc[0]) * i / steps,
+                    from_loc[1] + (to_loc[1] - from_loc[1]) * i / steps)
+                   for i in range(steps + 1)]
+        best, nearest = 0.0, None
+        for p in pts:
+            d = haversine_km(elat, elon, p[0], p[1])
+            nearest = d if nearest is None else min(nearest, d)
+            if d <= dr:
+                add = impact if d <= pr else (
+                    impact * (1 - (d - pr) / (dr - pr)) if dr > pr else impact)
+                best = max(best, add)
+        return best, nearest
+    except Exception:
+        return 0.0, None
+
+
+ROUTE_HIST_FILE = TRAFFIC_STATE / "route_score_history.json"
+
+
+def log_route_score(route_key, live, typical, min_gap_s=45, cap=240):
+    """Append a (live, typical) sample for a route, throttled to one per
+    `min_gap_s` and capped at `cap` points. Persists across refreshes so the
+    dashboard can plot how the live score drifts from the hourly baseline as
+    new camera sweeps land. Returns the route's series."""
+    try:
+        data = {}
+        if ROUTE_HIST_FILE.exists():
+            with open(ROUTE_HIST_FILE) as f:
+                data = json.load(f)
+        series = data.get(route_key, [])
+        now = _time.time()
+        if series and (now - series[-1].get("t", 0)) < min_gap_s:
+            return series
+        series.append({"t": now, "live": round(float(live), 3),
+                       "typ": round(float(typical), 3)})
+        series = series[-cap:]
+        data[route_key] = series
+        ROUTE_HIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(ROUTE_HIST_FILE, "w") as f:
+            json.dump(data, f)
+        return series
+    except Exception:
+        return []
+
+
+def load_route_history(route_key):
+    """Read the persisted (live, typical) samples for a route."""
+    try:
+        if ROUTE_HIST_FILE.exists():
+            with open(ROUTE_HIST_FILE) as f:
+                return json.load(f).get(route_key, [])
+    except Exception:
+        pass
+    return []
+
+
 def make_route_map(from_loc, to_loc, from_name, to_name,
                    camera_df=None, events=None, height=460, path_coords=None):
     """Map showing commute origin/destination with the route + congestion.
@@ -2001,17 +2074,62 @@ with tab_commute:
         live_level, n_live = route_live_congestion(
             traffic.get("vlm_history"), from_loc, to_loc, path_coords=route_path)
 
-        def _cong_rate(c):
-            if c < 1:
-                return 2.0
-            elif c < 2:
-                return 3.5
-            elif c < 2.5:
-                return 5.0
-            return 7.0
+        # Drive-time model: scale the REAL free-flow time (OSRM duration, or
+        # ~40 km/h fallback) by a realistic congestion multiplier rather than
+        # a coarse min/km rate. 0/3 → 1.0x (free flow) ... 3/3 → 1.9x.
+        free_min = drive_min if drive_min else road_dist * 1.5
+
+        def _drive_min(c):
+            return free_min * (1.0 + 0.30 * max(0.0, min(3.0, c)))
+
+        test = traffic["test"]
+        cur_hour = datetime.now().hour
+        cur_slice = test[test["hour"] == cur_hour]
+        typ_cong = (cur_slice["congestion_level"].mean()
+                    if len(cur_slice) > 0 else 1.0)
+        typ_drive = _drive_min(typ_cong)
+
+        # Active what-if event from the simulator, if it touches this route.
+        sim_active = st.session_state.get("sim_result")
+        event_add, _ = event_route_impact(
+            sim_active, from_loc, to_loc, path_coords=route_path)
+        apply_event = False
+        if sim_active and event_add > 0.05:
+            apply_event = st.checkbox(
+                f"Apply simulated event — {sim_active['event_type']} @ "
+                f"{sim_active['location']} (+{event_add:.1f} levels on this route)",
+                value=True,
+                help="Overlays the What-If Event Simulator's impact onto this "
+                     "route, so you can see the commute hit before it happens.")
+        elif sim_active:
+            st.caption(f"Active simulation ({sim_active['event_type']} @ "
+                       f"{sim_active['location']}) is not near this route.")
+        eff_event = event_add if apply_event else 0.0
+
+        # Track the route's live score vs the hourly baseline over time so you
+        # can watch how each new camera sweep shifts it (persists to disk).
+        route_key = f"{from_name} → {to_name}"
+        if live_level is not None:
+            log_route_score(route_key, live_level, typ_cong)
+        _rhist = load_route_history(route_key)
+        if len(_rhist) >= 2:
+            st.markdown('<div class="cc-panel-title" style="margin-top:8px">'
+                        '📈 Route score vs typical · over time</div>',
+                        unsafe_allow_html=True)
+            _hdf = pd.DataFrame(_rhist)
+            _hdf["Time"] = pd.to_datetime(_hdf["t"], unit="s")
+            _hdf = _hdf.rename(columns={"live": "Live route",
+                                        "typ": "Typical (this hour)"})
+            st.line_chart(
+                _hdf.set_index("Time")[["Live route", "Typical (this hour)"]],
+                color=["#00e676", "#7d8da3"], height=220)
+            st.caption(
+                "Live route congestion (green) vs the historical baseline for "
+                "the current hour (grey), 0–3 scale. The baseline is flat "
+                "within an hour; the green line moves as each VLM sweep updates "
+                "the route — that gap is what fresh video is changing.")
 
         if run_commute:
-            test = traffic["test"]
             results = []
             for hour in range(6, 21):
                 time_slice = test[
@@ -2022,13 +2140,13 @@ with tab_commute:
                     time_slice = test[test["hour"] == hour]
                 hcong = (time_slice["congestion_level"].mean()
                          if len(time_slice) > 0 else 1.0)
-                drive_min = road_dist * _cong_rate(hcong)
+                dmin = _drive_min(hcong)
                 results.append({
                     "Hour": f"{hour:02d}:00",
                     "Congestion": round(hcong, 2),
-                    "Drive (min)": round(drive_min, 0),
-                    "Arrival": f"{hour + int(drive_min) // 60:02d}:"
-                               f"{int(drive_min) % 60:02d}",
+                    "Drive (min)": round(dmin, 0),
+                    "Arrival": f"{hour + int(dmin) // 60:02d}:"
+                               f"{int(dmin) % 60:02d}",
                 })
             results_df = pd.DataFrame(results)
             best_idx = results_df["Drive (min)"].idxmin()
@@ -2043,52 +2161,56 @@ with tab_commute:
             m4.metric("Time Saved", f"{saved:.0f} min",
                       help="vs. worst departure window")
 
-            # ---- Live camera impact: how today's video changes "leave now" ----
+            # ---- Live camera impact: expected vs now vs delta ----
             st.markdown('<div class="cc-panel-title" style="margin-top:12px">'
                         '📹 Live camera impact · leaving now</div>',
                         unsafe_allow_html=True)
-            cur_hour = datetime.now().hour
-            cur_slice = test[(test["hour"] == cur_hour)]
-            typ_cong = (cur_slice["congestion_level"].mean()
-                        if len(cur_slice) > 0 else 1.0)
-            typ_drive = road_dist * _cong_rate(typ_cong)
 
-            if live_level is not None:
-                # Weight live observation heavily for the current moment.
-                blended = 0.35 * typ_cong + 0.65 * live_level
-                live_drive = road_dist * _cong_rate(blended)
+            if live_level is not None or eff_event > 0:
+                base_cong = (0.35 * typ_cong + 0.65 * live_level
+                             if live_level is not None else typ_cong)
+                route_cong = min(3.0, base_cong + eff_event)
+                live_drive = _drive_min(route_cong)
                 delta_min = live_drive - typ_drive
+                lvl_now = (live_level if live_level is not None else base_cong) + eff_event
+
                 lv1, lv2, lv3 = st.columns(3)
                 lv1.metric(
-                    "Typical for this hour", f"{typ_cong:.1f} / 3",
-                    help="Historical average congestion at this hour from "
-                         "346K records — what we'd predict with no live data.")
+                    "Expected (typical)", f"{typ_drive:.0f} min",
+                    help=f"What history alone predicts at this hour — "
+                         f"congestion {typ_cong:.1f}/3, no live data.")
                 lv2.metric(
-                    "Live on your route", f"{live_level:.1f} / 3",
-                    delta=f"{live_level - typ_cong:+.1f} vs typical",
-                    delta_color="inverse",
-                    help=f"Average of {n_live} camera(s) the VLM is watching "
-                         f"within ~0.8 km of your route, right now.")
-                lv3.metric(
                     "Drive time now", f"{live_drive:.0f} min",
-                    delta=f"{delta_min:+.0f} min vs typical",
+                    help=f"Re-estimated from live conditions "
+                         f"(congestion {route_cong:.1f}/3"
+                         + (f", incl. +{eff_event:.1f} from event"
+                            if eff_event > 0 else "") + ").")
+                lv3.metric(
+                    "Δ vs typical", f"{delta_min:+.0f} min",
+                    delta=f"{lvl_now - typ_cong:+.1f} levels",
                     delta_color="inverse",
-                    help="Drive time re-estimated using the live camera "
-                         "reading instead of the historical average.")
-                _dir = ("worse" if delta_min > 0.5 else
-                        "better" if delta_min < -0.5 else "about the same as")
+                    help="Drive time now minus the typical drive time. "
+                         "Negative = faster than usual.")
+
+                _src = []
+                if live_level is not None:
+                    _src.append(f"{n_live} live camera(s) reading "
+                                f"{live_level:.1f}/3")
+                if eff_event > 0:
+                    _src.append(f"a simulated event adding +{eff_event:.1f}")
+                _dir = ("slower than" if delta_min > 0.5 else
+                        "faster than" if delta_min < -0.5 else
+                        "about the same as")
                 st.caption(
-                    f"The VLM just analyzed {n_live} camera(s) on this route. "
-                    f"They read **{live_level:.1f}/3** vs the historical "
-                    f"**{typ_cong:.1f}/3**, so the live drive-time estimate is "
-                    f"**{_dir}** typical ({delta_min:+.0f} min). Re-runs every "
-                    f"sweep as new video comes in.")
+                    f"Based on {' and '.join(_src)}, the live estimate is "
+                    f"**{_dir}** the typical **{typ_drive:.0f} min** "
+                    f"({delta_min:+.0f} min). Updates every sweep.")
             else:
                 st.caption(
-                    "No VLM cameras on this route have reported yet — the "
-                    "estimate above is the historical average only. As the "
-                    "live sweep reaches cameras along this route, a live "
-                    "adjustment will appear here.")
+                    f"No live cameras on this route have reported yet — "
+                    f"expected drive time is **{typ_drive:.0f} min** "
+                    f"(typical for {cur_hour:02d}:00). A live adjustment appears "
+                    f"here once the sweep reaches your route.")
 
             st.markdown('<div class="cc-panel-title" style="margin-top:8px">'
                         'Departure Window Analysis</div>',
