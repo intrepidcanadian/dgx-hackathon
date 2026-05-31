@@ -3219,40 +3219,49 @@ with tab_arch:
                 '📚 Source datasets — what the models are built from</div>',
                 unsafe_allow_html=True)
     data_tbl = pd.DataFrame([
-        {"Dataset (Toronto Open Data / CKAN)": "Turning Movement Counts",
-         "Resource": "262469c2…",
+        {"Dataset (Toronto Open Data)": "Multimodal Intersection (Turning Movement) Counts",
+         "CKAN resource id": "262469c2-abfe-4756-9068-4ea5c7ba1af7",
          "What it provides": "15-min intersection counts by mode (cars/trucks/buses/bikes/peds)",
          "Feeds": "Base XGBoost training + the congestion target"},
-        {"Dataset (Toronto Open Data / CKAN)": "Midblock Speed & Volume",
-         "Resource": "b72cca3a…",
+        {"Dataset (Toronto Open Data)": "Midblock Speed & Volume",
+         "CKAN resource id": "b72cca3a-8190-47f7-8761-98f0b49bafc7",
          "What it provides": "Daily volumes + avg / 85th-pct speed per road segment",
          "Feeds": "Speed/volume context"},
-        {"Dataset (Toronto Open Data / CKAN)": "Traffic Cameras",
-         "Resource": "824d2986…",
+        {"Dataset (Toronto Open Data)": "Traffic Cameras",
+         "CKAN resource id": "824d2986-2fe0-4513-bdfb-e37e2499e7a9",
          "What it provides": "336 cameras with lat/lon + live image URLs",
          "Feeds": "gemma3 VLM frame source"},
-        {"Dataset (Toronto Open Data / CKAN)": "Midblock Count Stations (summary)",
-         "Resource": "e90038e7…",
+        {"Dataset (Toronto Open Data)": "Midblock Counts — summary (svc_most_recent_summary_data)",
+         "CKAN resource id": "e90038e7-ccb9-4bd2-af3e-696adc904c18",
          "What it provides": "Measured daily/peak volume + typical speed per station",
          "Feeds": "Per-camera baseline (17_camera_baseline.py)"},
-        {"Dataset (Toronto Open Data / CKAN)": "Special Events (Liquor Licence)",
-         "Resource": "e9f77756…",
+        {"Dataset (Toronto Open Data)": "Special Events (Liquor Licence endorsements)",
+         "CKAN resource id": "e9f77756-2baf-46ba-b2c6-4050e2fba755",
          "What it provides": "~4,420 municipally-significant events 2019–2026 w/ lat/lon + dates",
          "Feeds": "Event-aware model (13_enrich_events.py)"},
-        {"Dataset (Toronto Open Data / CKAN)": "Road Restrictions (live) + disruption feeds",
-         "Resource": "live",
-         "What it provides": "Active closures/construction, utility cuts, TTC delays, collisions",
-         "Feeds": "Restriction & disruption features (08/13)"},
-        {"Dataset (Toronto Open Data / CKAN)": "Open-Meteo ERA5 archive",
-         "Resource": "no key",
+        {"Dataset (Toronto Open Data)": "Disruption feeds — utility cuts, TTC delays, KSI collisions, permits, restrictions",
+         "CKAN resource id": "see ids below",
+         "What it provides": "Active closures/construction, transit delays, incident history",
+         "Feeds": "Disruption features (08_enrich_traffic_data.py)"},
+        {"Dataset (Toronto Open Data)": "Open-Meteo ERA5 archive (not Toronto OD)",
+         "CKAN resource id": "archive-api.open-meteo.com",
          "What it provides": "Historical hourly temp / precip / snow / wind / visibility",
          "Feeds": "Weather Impact analysis (18_enrich_weather.py)"},
     ])
     st.dataframe(data_tbl, hide_index=True, width='stretch')
     st.caption(
-        "Pipeline order (pipeline.py data): 01 pull turning-movement + speed + "
-        "cameras → 17 camera baseline → 08 disruption enrichment → 13 events → "
-        "18 weather. Then pipeline.py train fits the models below.")
+        "All Toronto ids are CKAN datastore resource ids, queried via "
+        "ckan0.cf.opendata.inter.prod-toronto.ca/api/3/action/datastore_search?id=<id>. "
+        "Disruption-feed resource ids (08): utility cuts "
+        "ebdec599-4522-4473-b276-fa07d8638248 · TTC subway "
+        "6088e14f-e46e-4f5c-9daa-dea1359ad396 · TTC bus "
+        "e271cdae-8788-4980-96ce-6a5c95bc6618 · TTC streetcar "
+        "b68cb71b-44a7-4394-97e2-5d2f41462a5d · collisions (KSI) "
+        "9c9a9b60-95c1-4541-ad44-15c4a643aff9 · building permits "
+        "6d0229af-bc54-46de-9c2b-26759b01dd05 · road restrictions "
+        "2265bfca-e845-4613-b341-70ee2ac73fbe. The live road-restriction CART "
+        "feed (13) is secure.toronto.ca/opendata/cart/road_restrictions/v3 (CSV). "
+        "Pipeline order (pipeline.py data): 01 → 17 → 08 → 13 → 18, then train.")
 
     # ---- Models & training ----
     st.markdown('<div class="cc-panel-title" style="margin-top:14px">'
