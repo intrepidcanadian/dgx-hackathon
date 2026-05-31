@@ -757,11 +757,20 @@ def route_live_congestion(vlm_history, from_loc, to_loc, path_coords=None,
         return None, 0
 
 
-def event_route_impact(sim, from_loc, to_loc, path_coords=None):
+# Post-event egress timeline (minutes after start -> impact multiplier).
+# Shared by the What-If simulator and the commute overlay so both animate
+# the same ripple: impact peaks ~30 min after the event, then fades.
+EGRESS_OFFSETS = [0, 15, 30, 45, 60, 90, 120]
+EGRESS_CURVE = {0: 0.45, 15: 0.75, 30: 1.0, 45: 0.92,
+                60: 0.72, 90: 0.42, 120: 0.22}
+
+
+def event_route_impact(sim, from_loc, to_loc, path_coords=None, mult=1.0):
     """Added congestion levels a simulated event imposes on a route.
 
-    Uses the same distance-decay profile as the What-If simulator (at peak),
-    measured against the closest the route comes to the event epicentre.
+    Uses the same distance-decay profile as the What-If simulator, scaled by
+    `mult` (a point on the egress timeline; 1.0 = peak), measured against the
+    closest the route comes to the event epicentre.
     Returns (max_added_levels, nearest_km); (0.0, None) if no active sim."""
     try:
         if not sim:
@@ -769,7 +778,7 @@ def event_route_impact(sim, from_loc, to_loc, path_coords=None):
         elat, elon = sim["lat"], sim["lon"]
         pr = sim["params"]["peak_radius"]
         dr = sim["params"]["decay_radius"]
-        impact = sim["impact"]
+        impact = sim["impact"] * mult
         if path_coords:
             pts = [(c[1], c[0]) for c in path_coords]
         else:
@@ -1780,9 +1789,8 @@ with tab_simulate:
                 st.info("Configure parameters on the left and click **Run Simulation**.")
             else:
                 # Forecast timeline multiplier (post-event egress curve)
-                offsets = [0, 15, 30, 45, 60, 90, 120]
-                curve = {0: 0.45, 15: 0.75, 30: 1.0, 45: 0.92,
-                         60: 0.72, 90: 0.42, 120: 0.22}
+                offsets = EGRESS_OFFSETS
+                curve = EGRESS_CURVE
                 base_hr = sim["hour"]
                 def fmt_t(off):
                     h = (base_hr + off // 60) % 24
@@ -2050,21 +2058,36 @@ with tab_commute:
         typ_drive = _drive_min(typ_cong)
 
         # Active what-if event from the simulator, if it touches this route.
+        # event_peak is the impact at the egress peak; the timeline slider
+        # scales it along the same post-event curve the simulator animates.
         sim_active = st.session_state.get("sim_result")
-        event_add, _ = event_route_impact(
+        event_peak, _ = event_route_impact(
             sim_active, from_loc, to_loc, path_coords=route_path)
         apply_event = False
-        if sim_active and event_add > 0.05:
+        eff_event = 0.0
+        event_off = None
+        if sim_active and event_peak > 0.05:
+            ev_hr = sim_active.get("hour", 0)
             apply_event = st.checkbox(
                 f"Apply simulated event — {sim_active['event_type']} @ "
-                f"{sim_active['location']} (+{event_add:.1f} levels on this route)",
+                f"{sim_active['location']} (peak +{event_peak:.1f} levels on "
+                f"this route, event at {ev_hr:02d}:00)",
                 value=True,
                 help="Overlays the What-If Event Simulator's impact onto this "
                      "route, so you can see the commute hit before it happens.")
+            if apply_event:
+                def _fmt_off(o):
+                    h = (ev_hr + o // 60) % 24
+                    return f"T+{o} min ({h:02d}:{o % 60:02d})"
+                event_off = st.select_slider(
+                    "Drive through the event at…", options=EGRESS_OFFSETS,
+                    value=30, format_func=_fmt_off,
+                    help="How long after the event starts you'd be passing "
+                         "through. Impact peaks ~30 min in, then eases off.")
+                eff_event = event_peak * EGRESS_CURVE[event_off]
         elif sim_active:
             st.caption(f"Active simulation ({sim_active['event_type']} @ "
                        f"{sim_active['location']}) is not near this route.")
-        eff_event = event_add if apply_event else 0.0
 
         # Live-adjusted "leave now" estimate (falls back to typical when no
         # live data and no event). Computed once so the impact panel AND the
@@ -2138,7 +2161,8 @@ with tab_commute:
                     _src.append(f"{n_live} live camera(s) reading "
                                 f"{live_level:.1f}/3")
                 if eff_event > 0:
-                    _src.append(f"a simulated event adding +{eff_event:.1f}")
+                    _src.append(f"a simulated event adding +{eff_event:.1f} "
+                                f"at T+{event_off} min")
                 _dir = ("slower than" if delta_min > 0.5 else
                         "faster than" if delta_min < -0.5 else
                         "about the same as")
