@@ -807,26 +807,29 @@ def route_live_congestion(vlm_history, from_loc, to_loc, path_coords=None,
     Uses the most recent observation per camera in vlm_history, keeps the ones
     within `radius_km` of the route geometry (the OSRM path if available, else
     the straight start→end line sampled into points), and returns
-    (mean_level, n_cameras, n_total) where n_total is how many distinct cameras
-    have a live reading anywhere (so callers can show "N of TOTAL on route").
-    Returns (None, 0, n_total) if no live cameras are on route.
+    (mean_level, n_cameras, n_total, on_route_rows) where n_total is how many
+    distinct cameras have a live reading anywhere (so callers can show "N of
+    TOTAL on route") and on_route_rows is a list of dicts (location + live
+    level) for the cameras actually on the route, so callers can score each
+    against its measured road baseline.
+    Returns (None, 0, n_total, []) if no live cameras are on route.
 
     This is what lets fresh camera video actually move the commute estimate:
     historical averages give the baseline, these cameras say what's happening
     *right now* on the specific roads you'd drive."""
     try:
         if vlm_history is None or len(vlm_history) == 0:
-            return None, 0, 0
+            return None, 0, 0, []
         cols = {"lat", "lon", "congestion_level"}
         if not cols.issubset(vlm_history.columns):
-            return None, 0, 0
+            return None, 0, 0, []
 
         vh = vlm_history.dropna(subset=["lat", "lon", "congestion_level"]).copy()
         if "location" in vh.columns and "timestamp" in vh.columns:
             vh = (vh.sort_values("timestamp")
                     .drop_duplicates("location", keep="last"))
         if len(vh) == 0:
-            return None, 0, 0
+            return None, 0, 0, []
         n_total = len(vh)
 
         # Build sample points along the route to measure distance against.
@@ -839,16 +842,24 @@ def route_live_congestion(vlm_history, from_loc, to_loc, path_coords=None,
                    for i in range(steps + 1)]
 
         on_route = []
+        on_route_rows = []
         for _, cam in vh.iterrows():
             dmin = min(haversine_km(cam["lat"], cam["lon"], p[0], p[1])
                        for p in pts)
             if dmin <= radius_km:
-                on_route.append(float(cam["congestion_level"]))
+                lvl = float(cam["congestion_level"])
+                on_route.append(lvl)
+                on_route_rows.append({
+                    "location": cam.get("location"),
+                    "level": lvl,
+                    "dist_km": round(dmin, 3),
+                })
         if not on_route:
-            return None, 0, n_total
-        return sum(on_route) / len(on_route), len(on_route), n_total
+            return None, 0, n_total, []
+        return (sum(on_route) / len(on_route), len(on_route), n_total,
+                on_route_rows)
     except Exception:
-        return None, 0, 0
+        return None, 0, 0, []
 
 
 # Post-event egress timeline (minutes after start -> impact multiplier).
@@ -2164,7 +2175,7 @@ with tab_commute:
         # Live camera congestion on this specific route (drives the
         # "leave now" adjustment below). Computed regardless of button press
         # so the comparison panel can render.
-        live_level, n_live, n_total_live = route_live_congestion(
+        live_level, n_live, n_total_live, on_route_cams = route_live_congestion(
             traffic.get("vlm_history"), from_loc, to_loc, path_coords=route_path)
 
         # Drive-time model: scale the REAL free-flow time (OSRM duration, or
@@ -2296,6 +2307,45 @@ with tab_commute:
                     f"Based on {' and '.join(_src)}, the live estimate is "
                     f"**{_dir}** the typical **{typ_drive:.0f} min** "
                     f"({delta_min:+.0f} min). Updates every sweep.")
+
+                # Score each on-route camera against its measured road
+                # baseline (City count-station data) so the live read isn't
+                # just "1.8/3" but "busier/quieter than this road normally is
+                # at this hour", plus the road's typical speed as ground truth.
+                _cb = load_camera_baseline()
+                if _cb is not None and on_route_cams:
+                    _now = datetime.now()
+                    _hr, _wknd = _now.hour, _now.weekday() >= 5
+                    busier = quieter = typ = 0
+                    speeds = []
+                    for c in on_route_cams:
+                        loc = c.get("location")
+                        if loc not in _cb.index:
+                            continue
+                        brow = _cb.loc[loc]
+                        if hasattr(brow, "to_dict"):
+                            brow = brow.to_dict()
+                        sc = baseline_score(brow, _hr, c.get("level"), _wknd)
+                        if sc is None:
+                            continue
+                        if sc["delta"] >= 0.18:
+                            busier += 1
+                        elif sc["delta"] <= -0.18:
+                            quieter += 1
+                        else:
+                            typ += 1
+                        if pd.notna(sc.get("avg_speed")):
+                            speeds.append(float(sc["avg_speed"]))
+                    scored = busier + quieter + typ
+                    if scored:
+                        _sp = (f" Roads here normally move ~{np.mean(speeds):.0f} "
+                               f"km/h." if speeds else "")
+                        st.caption(
+                            f"📊 **vs measured road baselines** (typical for "
+                            f"{_hr:02d}:00 {'weekend' if _wknd else 'weekday'}): "
+                            f"🟠 {busier} busier · ⚪ {typ} about typical · "
+                            f"🟢 {quieter} quieter — across {scored} on-route "
+                            f"cameras matched to City count stations." + _sp)
             else:
                 st.caption(
                     f"No live cameras on this route have reported yet — "
@@ -2494,6 +2544,35 @@ with tab_nowcast:
                              delta=None)
                 free_pct = (vlm["congestion_level"] == 0).mean() * 100
                 vcol4.metric("Free Flow", f"{free_pct:.0f}%")
+
+                # Score the live sweep against measured road baselines —
+                # is the city anomalously busy/quiet for this hour, or normal?
+                _cb = load_camera_baseline()
+                if _cb is not None and "location" in vlm.columns:
+                    _n = datetime.now()
+                    _hr, _wk = _n.hour, _n.weekday() >= 5
+                    busier = quieter = scored = 0
+                    for _, r in vlm.iterrows():
+                        loc = str(r.get("location"))
+                        if loc not in _cb.index:
+                            continue
+                        sc = baseline_score(_cb.loc[loc].to_dict(), _hr,
+                                            r.get("congestion_level"), _wk)
+                        if not sc:
+                            continue
+                        scored += 1
+                        if sc["delta"] >= 0.18:
+                            busier += 1
+                        elif sc["delta"] <= -0.18:
+                            quieter += 1
+                    if scored:
+                        typ = scored - busier - quieter
+                        st.caption(
+                            f"📊 **vs measured road baselines** (typical for "
+                            f"{_hr:02d}:00 {'weekend' if _wk else 'weekday'}): "
+                            f"🟠 {busier} busier · ⚪ {typ} about typical · "
+                            f"🟢 {quieter} quieter — across {scored} cameras "
+                            f"matched to City count stations.")
 
                 # Distribution bar
                 st.subheader("Congestion Distribution")
