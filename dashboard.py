@@ -764,12 +764,23 @@ def _nemotron_generate(prompt: str) -> dict:
         return {"ok": False, "error": str(e)}
 
 
-def render_ai_summary(tab_key: str, context: str, instruction: str = ""):
+def render_ai_summary(tab_key: str, context: str, instruction: str = "",
+                      container=None):
     """On-demand nemotron summary panel for a tab.
 
     Generates on button click (nemotron is slow), persists the result in
     session state across reruns/auto-refresh, and degrades gracefully when
-    Ollama/nemotron is unreachable (e.g. running locally without GPU)."""
+    Ollama/nemotron is unreachable (e.g. running locally without GPU).
+
+    If `container` is given (an st.container() created earlier in the tab),
+    the panel renders into it — letting the summary appear at the TOP of the
+    tab while still being driven by context computed further down."""
+    target = container if container is not None else st.container()
+    with target:
+        _render_ai_summary_body(tab_key, context, instruction)
+
+
+def _render_ai_summary_body(tab_key: str, context: str, instruction: str = ""):
     state_key = f"ai_summary_{tab_key}"
     st.markdown(
         '<div class="cc-panel-title" style="margin-top:6px">'
@@ -1206,6 +1217,9 @@ with tab_traffic:
 
     st.header("Traffic Congestion Analysis")
 
+    # AI summary appears here at the top; filled from context computed below
+    ai_slot_traffic = st.container()
+
     # VLM live status
     if traffic.get("hermes"):
         hermes_data = traffic["hermes"]
@@ -1301,7 +1315,7 @@ with tab_traffic:
         f"Busiest hour of day = {_peak_hour}:00, busiest day = {_peak_day}. "
         f"Top congestion drivers: {_top_feats}{_live_note}."
     )
-    render_ai_summary("traffic", traffic_ctx)
+    render_ai_summary("traffic", traffic_ctx, container=ai_slot_traffic)
 
 
 # ============================================================
@@ -1315,6 +1329,9 @@ with tab_cameras:
         "congestion classification; coverage accumulates toward all 336 as "
         "successive sweeps analyze more cameras."
     )
+
+    # AI summary at the top; filled from context computed below
+    ai_slot_cameras = st.container()
 
     if not traffic["available"] or traffic.get("cams") is None:
         st.warning("Camera list not available. Run scripts 01 (data) first.")
@@ -1460,7 +1477,7 @@ with tab_cameras:
                 f"at {ts[:16].replace('T', ' ') if ts else 'n/a'}. "
                 f"Congestion level distribution across analyzed cameras: {_lvl_str}."
             )
-            render_ai_summary("cameras", cameras_ctx)
+            render_ai_summary("cameras", cameras_ctx, container=ai_slot_cameras)
 
 
 # ============================================================
@@ -1651,6 +1668,9 @@ with tab_commute:
             'Route intelligence · Live event-aware</div></div>',
             unsafe_allow_html=True,
         )
+
+        # AI summary at the top; filled from context computed below
+        ai_slot_commute = st.container()
 
         LOCATIONS = {
             "Downtown (King/Bay)": (43.6510, -79.3830),
@@ -1868,6 +1888,7 @@ with tab_commute:
                 "commuter when to leave and why, based on the data below. "
                 "No preamble, no bullet points."
             ),
+            container=ai_slot_commute,
         )
 
 
@@ -1882,6 +1903,9 @@ with tab_nowcast:
         "to predict congestion one hour ahead. Unlike pure time-based models, "
         "nowcasting sees what's happening *right now*."
     )
+
+    # AI summary at the top; filled from context computed below
+    ai_slot_nowcast = st.container()
 
     # Live feed status banner
     if orch_status and orch_status.get("running"):
@@ -2144,7 +2168,7 @@ with tab_nowcast:
                 f" GNN network forecast trend: {gnn_fc.get('trend', 'n/a')} "
                 f"across {gnn_fc.get('n_nodes', '?')} intersections."
             )
-        render_ai_summary("nowcast", nowcast_ctx)
+        render_ai_summary("nowcast", nowcast_ctx, container=ai_slot_nowcast)
 
 
 # ============================================================
@@ -2156,6 +2180,9 @@ with tab_analytics:
         "Correlations and patterns across the traffic and VLM datasets. "
         "Reveals how weather, events, and time-of-day connect to congestion."
     )
+
+    # AI summary at the top; filled from context computed below
+    ai_slot_analytics = st.container()
 
     # Availability check
     avail_projects = []
@@ -2380,6 +2407,7 @@ with tab_analytics:
                 "patterns (e.g. weather, time-of-day) in the data below. "
                 "No preamble, no bullet points."
             ),
+            container=ai_slot_analytics,
         )
 
 
