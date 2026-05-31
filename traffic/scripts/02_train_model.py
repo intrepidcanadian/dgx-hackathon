@@ -132,7 +132,9 @@ pred_multi_prob = model_multi.predict(dtest_multi)
 pred_multi = pred_multi_prob.argmax(axis=1)
 
 labels = ["Low", "Moderate", "High", "Very High"][:n_classes]
+multi_acc = float((pred_multi == y_test_multi.astype(int)).mean())
 print(f"\n{classification_report(y_test_multi.astype(int), pred_multi, target_names=labels)}")
+print(f"Multiclass accuracy: {multi_acc:.4f}")
 
 # ============================================================
 # 4. TRAIN REGRESSION MODEL (predict raw volume)
@@ -210,6 +212,7 @@ test_pred.to_parquet(DATA_DIR / "test_predictions.parquet", index=False)
 meta = {
     "binary_auc": float(auc),
     "binary_ap": float(ap),
+    "multi_accuracy": multi_acc,
     "volume_mae": float(mae),
     "volume_rmse": float(rmse),
     "n_classes": n_classes,

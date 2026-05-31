@@ -280,6 +280,22 @@ def load_traffic():
         pred_file = TRAFFIC_DATA / "test_predictions.parquet"
         preds = pd.read_parquet(pred_file) if pred_file.exists() else None
 
+        # Backfill multiclass accuracy if the training run didn't persist it.
+        # 02_train_model.py historically saved binary/volume metrics but not the
+        # multiclass accuracy, so the "Traffic (Multi)" readout showed 0. Recover
+        # it directly from the saved test predictions (no retrain required).
+        if "multi_accuracy" not in meta and preds is not None:
+            try:
+                if {"pred_congestion_level", "congestion_level"}.issubset(preds.columns):
+                    valid = preds.dropna(subset=["congestion_level", "pred_congestion_level"])
+                    if len(valid):
+                        meta["multi_accuracy"] = float(
+                            (valid["pred_congestion_level"].astype(int)
+                             == valid["congestion_level"].astype(int)).mean()
+                        )
+            except Exception:
+                pass
+
         # NOTE: the per-sweep VLM artifacts (latest_analysis.csv, last_state.json,
         # latest_nowcast.json) are intentionally NOT loaded here. They change on
         # every VLM sweep, and this loader is cached for an hour, which would make
@@ -3275,5 +3291,37 @@ with tab_arch:
         'XGBoost <code>device=cuda</code>, and 24/7 Hermes monitoring; the '
         '<b>UI side</b> reads state files only, has no GPU dependency, and '
         'degrades gracefully when a feed is idle.</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="cc-panel-title" style="margin-top:10px">'
+                '🌧️ Offline data enrichment — external sources joined at build time</div>',
+                unsafe_allow_html=True)
+    enrich_tbl = pd.DataFrame([
+        {"Source": "Open-Meteo ERA5 archive",
+         "Stage": "18_enrich_weather.py",
+         "What it adds": "Historical hourly weather (temp, humidity, precip, snow, "
+                         "wind, visibility) joined to train/test by local date+hour; "
+                         "powers the Weather Impact panel. Free, no API key.",
+         "Scope": "Analysis-only (not in feature_cols.json)"},
+        {"Source": "City midblock count stations\n(svc_most_recent_summary_data)",
+         "Stage": "17_camera_baseline.py",
+         "What it adds": "Per-camera measured baseline (daily/peak volume + typical "
+                         "speed) from the nearest count station (median ~40 m); the "
+                         "ground truth each live VLM read is scored against.",
+         "Scope": "camera_baseline.parquet"},
+        {"Source": "City events feed",
+         "Stage": "13_enrich_events.py",
+         "What it adds": "Day-level citywide event features (count, size, spread, "
+                         "major-event flag) for the event-aware enriched XGBoost model.",
+         "Scope": "feature_cols_enriched.json"},
+    ])
+    st.dataframe(enrich_tbl, hide_index=True, width='stretch')
+    st.markdown(
+        '<div style="color:#cfe9d8;font-size:.86rem;line-height:1.5">'
+        'These run during the offline build (<code>pipeline.py data</code>), '
+        'after the raw pull and before model training, so the enriched columns '
+        'are present for both the Weather Impact analysis and the event-aware '
+        'congestion uplift shown on the Command Center.</div>',
         unsafe_allow_html=True,
     )
