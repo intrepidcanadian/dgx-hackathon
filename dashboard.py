@@ -1607,12 +1607,36 @@ with tab_simulate:
                 cam_df = pd.DataFrame(rows)
 
                 # Metrics
-                m1, m2, m3, m4 = st.columns(4)
+                _LEVELS = ["Free flow", "Light", "Moderate", "Heavy"]
+
+                def _lvl_name(v):
+                    return _LEVELS[min(3, max(0, int(round(v))))]
+
                 peak_now = sim["impact"] * mult
-                m1.metric("Baseline", f"{baseline:.1f} / 3")
-                m2.metric(f"Impact @ T+{t_off}", f"+{peak_now:.1f}")
-                m3.metric("Affected Intersections", len(aff))
-                m4.metric("Radius", f"{sim['params']['decay_radius']:.0f} km")
+                peak_level = min(3.0, baseline + peak_now)
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric(
+                    "Baseline congestion", f"{_lvl_name(baseline)} · {baseline:.1f}/3",
+                    help="Normal congestion near the epicentre with no event, on a "
+                         "0–3 scale: 0 Free flow · 1 Light · 2 Moderate · 3 Heavy.")
+                m2.metric(
+                    f"Projected @ {fmt_t(t_off)}",
+                    f"{_lvl_name(peak_level)} · {peak_level:.1f}/3",
+                    delta=f"+{peak_now:.1f} levels",
+                    help="Congestion at the epicentre at this point on the timeline: "
+                         "baseline plus the event's added load (capped at 3 = Heavy). "
+                         "The +value is how many congestion levels the event adds on "
+                         "the 0–3 scale.")
+                m3.metric("Affected intersections", len(aff),
+                          help="Intersections within the event's impact radius whose "
+                               "congestion is raised by the event.")
+                m4.metric("Impact radius", f"{sim['params']['decay_radius']:.0f} km",
+                          help="Distance from the epicentre over which the event's "
+                               "effect fades to zero.")
+                st.caption(
+                    "Congestion is a 0–3 scale (0 Free flow · 1 Light · 2 Moderate · "
+                    "3 Heavy). \"+X.X levels\" is how much the event raises it at the "
+                    "epicentre; the effect shrinks with distance and over time.")
 
                 # Map: event epicenter + affected heatmap
                 ev_marker = [{"name": f"{sim['event_type']} · {sim['location']}",
@@ -1637,8 +1661,12 @@ with tab_simulate:
         if sim and sim["affected"]:
             with st.expander("Affected intersections (detail)"):
                 aff_df = pd.DataFrame(sim["affected"]).sort_values("distance_km")
-                st.dataframe(aff_df[["location", "distance_km", "impact"]].head(25),
-                             hide_index=True, width='stretch')
+                aff_df = aff_df[["location", "distance_km", "impact"]].rename(columns={
+                    "location": "Intersection",
+                    "distance_km": "Distance (km)",
+                    "impact": "Added levels (0–3)",
+                })
+                st.dataframe(aff_df.head(25), hide_index=True, width='stretch')
 
         st.markdown('<div class="cc-panel-title" style="margin-top:10px">'
                     f'📍 Real Events Today ({len(events)})</div>', unsafe_allow_html=True)
