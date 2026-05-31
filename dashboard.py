@@ -3205,6 +3205,91 @@ with tab_arch:
         unsafe_allow_html=True,
     )
 
+    # Pull live training metrics so the tables reflect the actual saved models.
+    _tmeta = traffic.get("meta", {}) if traffic.get("available") else {}
+    _auc = _tmeta.get("binary_auc")
+    _multi = _tmeta.get("multi_accuracy")
+    _vmae = _tmeta.get("volume_mae")
+    _auc_s = f"{_auc:.4f} AUC" if isinstance(_auc, (int, float)) else "—"
+    _multi_s = f"{_multi * 100:.0f}% acc" if isinstance(_multi, (int, float)) else "—"
+    _vmae_s = f"MAE {_vmae:.1f}" if isinstance(_vmae, (int, float)) else "—"
+
+    # ---- Datasets ----
+    st.markdown('<div class="cc-panel-title" style="margin-top:10px">'
+                '📚 Source datasets — what the models are built from</div>',
+                unsafe_allow_html=True)
+    data_tbl = pd.DataFrame([
+        {"Dataset (Toronto Open Data / CKAN)": "Turning Movement Counts",
+         "Resource": "262469c2…",
+         "What it provides": "15-min intersection counts by mode (cars/trucks/buses/bikes/peds)",
+         "Feeds": "Base XGBoost training + the congestion target"},
+        {"Dataset (Toronto Open Data / CKAN)": "Midblock Speed & Volume",
+         "Resource": "b72cca3a…",
+         "What it provides": "Daily volumes + avg / 85th-pct speed per road segment",
+         "Feeds": "Speed/volume context"},
+        {"Dataset (Toronto Open Data / CKAN)": "Traffic Cameras",
+         "Resource": "824d2986…",
+         "What it provides": "336 cameras with lat/lon + live image URLs",
+         "Feeds": "gemma3 VLM frame source"},
+        {"Dataset (Toronto Open Data / CKAN)": "Midblock Count Stations (summary)",
+         "Resource": "e90038e7…",
+         "What it provides": "Measured daily/peak volume + typical speed per station",
+         "Feeds": "Per-camera baseline (17_camera_baseline.py)"},
+        {"Dataset (Toronto Open Data / CKAN)": "Special Events (Liquor Licence)",
+         "Resource": "e9f77756…",
+         "What it provides": "~4,420 municipally-significant events 2019–2026 w/ lat/lon + dates",
+         "Feeds": "Event-aware model (13_enrich_events.py)"},
+        {"Dataset (Toronto Open Data / CKAN)": "Road Restrictions (live) + disruption feeds",
+         "Resource": "live",
+         "What it provides": "Active closures/construction, utility cuts, TTC delays, collisions",
+         "Feeds": "Restriction & disruption features (08/13)"},
+        {"Dataset (Toronto Open Data / CKAN)": "Open-Meteo ERA5 archive",
+         "Resource": "no key",
+         "What it provides": "Historical hourly temp / precip / snow / wind / visibility",
+         "Feeds": "Weather Impact analysis (18_enrich_weather.py)"},
+    ])
+    st.dataframe(data_tbl, hide_index=True, width='stretch')
+    st.caption(
+        "Pipeline order (pipeline.py data): 01 pull turning-movement + speed + "
+        "cameras → 17 camera baseline → 08 disruption enrichment → 13 events → "
+        "18 weather. Then pipeline.py train fits the models below.")
+
+    # ---- Models & training ----
+    st.markdown('<div class="cc-panel-title" style="margin-top:14px">'
+                '🧠 Models & how each is trained</div>',
+                unsafe_allow_html=True)
+    model_tbl = pd.DataFrame([
+        {"Model": "Congestion classifier (binary)",
+         "Algorithm / training": "XGBoost logistic, hist, 300 rounds, temporal 80/20 split",
+         "Target": "top-25% 'high congestion' flag",
+         "Result": _auc_s},
+        {"Model": "Congestion level (4-class)",
+         "Algorithm / training": "XGBoost multi:softprob, 300 rounds, early-stop 30",
+         "Target": "per-location volume quartile 0–3 (Low→Very High)",
+         "Result": _multi_s},
+        {"Model": "Volume regression",
+         "Algorithm / training": "XGBoost reg:squarederror, 300 rounds",
+         "Target": "raw 15-min vehicle volume",
+         "Result": _vmae_s},
+        {"Model": "Event-aware congestion",
+         "Algorithm / training": "XGBoost multi:softprob on 39 feats (30 base + 6 event + 3 restriction)",
+         "Target": "level 0–3 with today's events as features",
+         "Result": "counterfactual event uplift"},
+        {"Model": "VLM nowcast",
+         "Algorithm / training": "XGBoost multi:softprob, observe t → predict t+1, time-split (leakage-free)",
+         "Target": "next-sweep level from 6 pattern + 5 live-VLM feats",
+         "Result": "real gain vs patterns-only"},
+        {"Model": "STGNN forecaster",
+         "Algorithm / training": "PyTorch: GRU + self-adaptive adjacency + 2× diffusion conv, sensor-dropout 0.3, MSE, ~26K params, cuda",
+         "Target": "next 4 hourly steps across 200 graph nodes",
+         "Result": "multi-horizon timeline"},
+        {"Model": "Live camera reader",
+         "Algorithm / training": "gemma3:4b VLM via Ollama — inference only, no training",
+         "Target": "per-frame congestion 0–3 + incident flag",
+         "Result": "live network state"},
+    ])
+    st.dataframe(model_tbl, hide_index=True, width='stretch')
+
     st.markdown('<div class="cc-panel-title" style="margin-top:10px">'
                 '🖥️ Where the DGX Spark GPU is used</div>',
                 unsafe_allow_html=True)
@@ -3236,14 +3321,20 @@ with tab_arch:
             '<div class="cc-panel"><div class="cc-panel-title">'
             '🚗 Traffic — data modeling</div>'
             '<div style="color:#cfe9d8;font-size:.86rem;line-height:1.5;margin-top:6px">'
-            '<b>Target:</b> per-intersection congestion level 0–3 from '
-            'per-location quartile binning of 15-min volume (comparable across '
-            'very different intersections).<br><br>'
-            '<b>Features (30):</b> temporal (hour, DOW, cyclical sin/cos, '
-            'rush flags), volume/modal-split, and location history '
-            '(per-intersection mean/std/max, hour×loc & DOW×loc interactions).'
-            '<br><br><b>Models:</b> XGBoost binary (0.9937 AUC), 4-class (87%), '
-            'volume regression (MAE 4.6); VLM-enhanced XGBoost nowcast; and the '
+            '<b>Target derivation:</b> for each intersection we bin its own '
+            '15-min vehicle volume into quartiles (<code>pd.qcut</code>) → '
+            'congestion level 0–3. Binning <i>per location</i> makes the label '
+            'comparable across a side street and the Gardiner. The binary target '
+            'is the top quartile (level 3).<br><br>'
+            '<b>Features (30):</b> temporal (hour, DOW, month, cyclical sin/cos, '
+            'rush flags), volume + modal split (veh/ped/bike %, veh:ped ratio), '
+            'and per-location history (mean/std/max volume, plus hour×loc and '
+            'DOW×loc average interactions). Built once offline in '
+            '<code>01_prepare</code>.<br><br>'
+            '<b>Split:</b> temporal — oldest 80% train, most-recent 20% test, so '
+            'we never score on the past. <b>Models:</b> XGBoost binary '
+            f'({_auc_s}), 4-class ({_multi_s}), volume regression ({_vmae_s}); '
+            'the event-aware + VLM-nowcast XGBoost variants; and the '
             'spatio-temporal GNN →</div></div>',
             unsafe_allow_html=True,
         )
@@ -3295,33 +3386,36 @@ with tab_arch:
     )
 
     st.markdown('<div class="cc-panel-title" style="margin-top:10px">'
-                '🌧️ Offline data enrichment — external sources joined at build time</div>',
+                '🔗 How the models interact to produce a prediction</div>',
                 unsafe_allow_html=True)
-    enrich_tbl = pd.DataFrame([
-        {"Source": "Open-Meteo ERA5 archive",
-         "Stage": "18_enrich_weather.py",
-         "What it adds": "Historical hourly weather (temp, humidity, precip, snow, "
-                         "wind, visibility) joined to train/test by local date+hour; "
-                         "powers the Weather Impact panel. Free, no API key.",
-         "Scope": "Analysis-only (not in feature_cols.json)"},
-        {"Source": "City midblock count stations\n(svc_most_recent_summary_data)",
-         "Stage": "17_camera_baseline.py",
-         "What it adds": "Per-camera measured baseline (daily/peak volume + typical "
-                         "speed) from the nearest count station (median ~40 m); the "
-                         "ground truth each live VLM read is scored against.",
-         "Scope": "camera_baseline.parquet"},
-        {"Source": "City events feed",
-         "Stage": "13_enrich_events.py",
-         "What it adds": "Day-level citywide event features (count, size, spread, "
-                         "major-event flag) for the event-aware enriched XGBoost model.",
-         "Scope": "feature_cols_enriched.json"},
-    ])
-    st.dataframe(enrich_tbl, hide_index=True, width='stretch')
+    st.code(
+        "WHAT'S NORMAL          WHAT'S HAPPENING NOW            WHAT'S NEXT\n"
+        "─────────────          ────────────────────            ───────────\n"
+        "XGBoost (patterns) ┐   gemma3 VLM reads 336 frames ┐   VLM nowcast (t→t+1)\n"
+        "  hour/DOW/loc     │     congestion 0–3 + incident │     live state + patterns\n"
+        "  history          │             │                 │            │\n"
+        "                   │   count-station baseline (17) │     STGNN multi-horizon\n"
+        "                   │     'busier/quieter than this │       propagates over the\n"
+        "                   │      road normally is'        ┘       road graph, +1..+4h\n"
+        "                   │\n"
+        "  event-aware model (13) ── counterfactual uplift ──► added on Command Center\n"
+        "  weather (18) ──── analysis-only correlations ─────► Weather Impact panel",
+        language="text",
+    )
     st.markdown(
         '<div style="color:#cfe9d8;font-size:.86rem;line-height:1.5">'
-        'These run during the offline build (<code>pipeline.py data</code>), '
-        'after the raw pull and before model training, so the enriched columns '
-        'are present for both the Weather Impact analysis and the event-aware '
-        'congestion uplift shown on the Command Center.</div>',
+        'The base XGBoost answers <b>"what is normal for this place and time"</b> '
+        'from historical patterns. The gemma3 VLM answers <b>"what is actually '
+        'happening right now"</b> from live camera frames — and that read is '
+        'scored against the measured <b>count-station baseline</b> so a level-2 '
+        'on a quiet street and on the Gardiner mean different things. The '
+        '<b>VLM nowcast</b> combines the live state with patterns to predict the '
+        'next sweep (t→t+1), while the <b>STGNN</b> propagates congestion across '
+        'the learned road graph for a multi-horizon (+1…+4h) timeline. Two side '
+        'channels adjust the picture without retraining the base model: the '
+        '<b>event-aware model</b> contributes a held-fixed counterfactual uplift '
+        '(today\'s events vs none) shown on the Command Center, and <b>weather</b> '
+        'columns drive the analysis-only correlations on the Weather Impact '
+        'panel.</div>',
         unsafe_allow_html=True,
     )
