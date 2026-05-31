@@ -344,6 +344,60 @@ def load_live_state():
     return out
 
 
+@st.cache_data(ttl=5)
+def load_hardware_stats():
+    """Live host stats, refreshed every 5s.
+
+    GPU via nvidia-smi; CPU/memory via psutil (falls back to /proc).
+    Each field is None if it can't be read, so the panel can show a dash
+    instead of a fake number. `live` is True only if at least one real
+    reading succeeded."""
+    import subprocess
+    out = {"gpu": None, "gpu_mem": None, "cpu": None, "mem": None, "live": False}
+
+    # GPU utilization + memory via nvidia-smi
+    try:
+        res = subprocess.run(
+            ["nvidia-smi",
+             "--query-gpu=utilization.gpu,memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=3,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            first = res.stdout.strip().splitlines()[0]
+            util, mem_used, mem_total = [p.strip() for p in first.split(",")]
+            out["gpu"] = int(float(util))
+            if float(mem_total) > 0:
+                out["gpu_mem"] = int(round(float(mem_used) / float(mem_total) * 100))
+            out["live"] = True
+    except Exception:
+        pass
+
+    # CPU + system memory via psutil
+    try:
+        import psutil
+        out["cpu"] = int(round(psutil.cpu_percent(interval=0.3)))
+        out["mem"] = int(round(psutil.virtual_memory().percent))
+        out["live"] = True
+    except Exception:
+        # Fallback: /proc/meminfo for memory (no easy stdlib CPU%)
+        try:
+            info = {}
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    k, _, v = line.partition(":")
+                    info[k] = float(v.split()[0])  # kB
+            total = info.get("MemTotal", 0)
+            avail = info.get("MemAvailable", 0)
+            if total > 0:
+                out["mem"] = int(round((total - avail) / total * 100))
+                out["live"] = True
+        except Exception:
+            pass
+
+    return out
+
+
 @st.cache_data(ttl=3600)
 def load_dinesafe():
     """Load DineSafe model, predictions, and feature importances."""
@@ -653,6 +707,54 @@ def fetch_road_route(from_lat, from_lon, to_lat, to_lon):
         return coords, route["distance"] / 1000.0, route["duration"] / 60.0
     except Exception:
         return None
+
+
+def route_live_congestion(vlm_history, from_loc, to_loc, path_coords=None,
+                          radius_km=0.8):
+    """Average *live* VLM camera congestion for cameras sitting on the route.
+
+    Uses the most recent observation per camera in vlm_history, keeps the ones
+    within `radius_km` of the route geometry (the OSRM path if available, else
+    the straight start→end line sampled into points), and returns
+    (mean_level, n_cameras). Returns (None, 0) if no live cameras are on route.
+
+    This is what lets fresh camera video actually move the commute estimate:
+    historical averages give the baseline, these cameras say what's happening
+    *right now* on the specific roads you'd drive."""
+    try:
+        if vlm_history is None or len(vlm_history) == 0:
+            return None, 0
+        cols = {"lat", "lon", "congestion_level"}
+        if not cols.issubset(vlm_history.columns):
+            return None, 0
+
+        vh = vlm_history.dropna(subset=["lat", "lon", "congestion_level"]).copy()
+        if "location" in vh.columns and "timestamp" in vh.columns:
+            vh = (vh.sort_values("timestamp")
+                    .drop_duplicates("location", keep="last"))
+        if len(vh) == 0:
+            return None, 0
+
+        # Build sample points along the route to measure distance against.
+        if path_coords:
+            pts = [(c[1], c[0]) for c in path_coords]  # [lon,lat] -> (lat,lon)
+        else:
+            steps = 24
+            pts = [(from_loc[0] + (to_loc[0] - from_loc[0]) * i / steps,
+                    from_loc[1] + (to_loc[1] - from_loc[1]) * i / steps)
+                   for i in range(steps + 1)]
+
+        on_route = []
+        for _, cam in vh.iterrows():
+            dmin = min(haversine_km(cam["lat"], cam["lon"], p[0], p[1])
+                       for p in pts)
+            if dmin <= radius_km:
+                on_route.append(float(cam["congestion_level"]))
+        if not on_route:
+            return None, 0
+        return sum(on_route) / len(on_route), len(on_route)
+    except Exception:
+        return None, 0
 
 
 def make_route_map(from_loc, to_loc, from_name, to_name,
@@ -1125,16 +1227,21 @@ with tab_overview:
 
     # ===== RIGHT: DGX hardware + models =====
     with right:
-        # Pull live GPU/CPU stats if orchestrator status carries them; else demo
-        gpu_pct = 63
-        cpu_pct = 28
-        mem_pct = 54
+        # Live host stats (nvidia-smi + psutil); None where unreadable.
+        hw = load_hardware_stats()
+        online = hw["live"]
+        status_dot = "🟢 Online" if online else "⚪ Stats N/A"
+
+        def _fmt(p):
+            return f"{p}%" if p is not None else "—"
+
+        gpu_pct, cpu_pct, mem_pct = hw["gpu"], hw["cpu"], hw["mem"]
         st.markdown(f"""
         <div class="cc-panel">
-          <div class="cc-panel-title">🖥️ DGX Spark (Local) · 🟢 Online</div>
-          {hw_bar("GPU · NVIDIA Blackwell", f"{gpu_pct}%", gpu_pct)}
-          {hw_bar("CPU · 20-core Arm", f"{cpu_pct}%", cpu_pct)}
-          {hw_bar("Memory · 128 GB unified", f"{mem_pct}%", mem_pct)}
+          <div class="cc-panel-title">🖥️ DGX Spark (Local) · {status_dot}</div>
+          {hw_bar("GPU · NVIDIA Blackwell", _fmt(gpu_pct), gpu_pct or 0, warn=(gpu_pct or 0) >= 90)}
+          {hw_bar("CPU · 20-core Arm", _fmt(cpu_pct), cpu_pct or 0, warn=(cpu_pct or 0) >= 90)}
+          {hw_bar("Memory · 128 GB unified", _fmt(mem_pct), mem_pct or 0, warn=(mem_pct or 0) >= 90)}
           <div style="color:#7d8da3;font-size:.74rem;margin-top:8px">
             All inference runs locally — no data leaves this device.</div>
         </div>""", unsafe_allow_html=True)
@@ -1254,6 +1361,34 @@ with tab_traffic:
         if cam_results:
             cam_df = pd.DataFrame(cam_results).sort_values("Level", ascending=False)
             st.dataframe(cam_df, hide_index=True, width=800)
+
+        # ---- Live cameras vs. the historical model, right now ----
+        live_lvls = [d.get("level") for d in hermes_data.values()
+                     if isinstance(d.get("level"), (int, float)) and d.get("level") >= 0]
+        if live_lvls:
+            live_now = sum(live_lvls) / len(live_lvls)
+            _t = traffic["test"]
+            _cur = _t[_t["hour"] == datetime.now().hour]
+            typ_now = (_cur["congestion_level"].mean() if len(_cur) > 0 else 1.0)
+            d1, d2, d3 = st.columns(3)
+            d1.metric("Model expects (this hour)", f"{typ_now:.1f} / 3",
+                      help="Historical average congestion for the current "
+                           "hour from 346K records.")
+            d2.metric("Cameras see (live)", f"{live_now:.1f} / 3",
+                      delta=f"{live_now - typ_now:+.1f} vs model",
+                      delta_color="inverse",
+                      help=f"Live average across {len(live_lvls)} cameras "
+                           f"analyzed this sweep.")
+            _gap = live_now - typ_now
+            _word = ("heavier than" if _gap > 0.3 else
+                     "lighter than" if _gap < -0.3 else "in line with")
+            d3.metric("Cameras analyzed", len(live_lvls),
+                      help="Updates every VLM sweep as more cameras are read.")
+            st.caption(
+                f"Live camera video says traffic is **{_word}** the typical "
+                f"pattern for this hour ({live_now:.1f}/3 vs {typ_now:.1f}/3). "
+                f"The charts below are the fixed historical model; this row is "
+                f"what the cameras are changing in real time.")
 
     elif traffic.get("vlm") is not None:
         st.subheader("VLM Analysis Results")
@@ -1825,6 +1960,21 @@ with tab_commute:
                     f'<span class="cc-chip">{icon} {ev["name"]}</span>')
             st.markdown(" ".join(chips), unsafe_allow_html=True)
 
+        # Live camera congestion on this specific route (drives the
+        # "leave now" adjustment below). Computed regardless of button press
+        # so the comparison panel can render.
+        live_level, n_live = route_live_congestion(
+            traffic.get("vlm_history"), from_loc, to_loc, path_coords=route_path)
+
+        def _cong_rate(c):
+            if c < 1:
+                return 2.0
+            elif c < 2:
+                return 3.5
+            elif c < 2.5:
+                return 5.0
+            return 7.0
+
         if run_commute:
             test = traffic["test"]
             results = []
@@ -1837,15 +1987,7 @@ with tab_commute:
                     time_slice = test[test["hour"] == hour]
                 hcong = (time_slice["congestion_level"].mean()
                          if len(time_slice) > 0 else 1.0)
-                if hcong < 1:
-                    rate = 2.0
-                elif hcong < 2:
-                    rate = 3.5
-                elif hcong < 2.5:
-                    rate = 5.0
-                else:
-                    rate = 7.0
-                drive_min = road_dist * rate
+                drive_min = road_dist * _cong_rate(hcong)
                 results.append({
                     "Hour": f"{hour:02d}:00",
                     "Congestion": round(hcong, 2),
@@ -1865,6 +2007,53 @@ with tab_commute:
             m3.metric("Congestion", f"{best['Congestion']:.1f} / 3")
             m4.metric("Time Saved", f"{saved:.0f} min",
                       help="vs. worst departure window")
+
+            # ---- Live camera impact: how today's video changes "leave now" ----
+            st.markdown('<div class="cc-panel-title" style="margin-top:12px">'
+                        '📹 Live camera impact · leaving now</div>',
+                        unsafe_allow_html=True)
+            cur_hour = datetime.now().hour
+            cur_slice = test[(test["hour"] == cur_hour)]
+            typ_cong = (cur_slice["congestion_level"].mean()
+                        if len(cur_slice) > 0 else 1.0)
+            typ_drive = road_dist * _cong_rate(typ_cong)
+
+            if live_level is not None:
+                # Weight live observation heavily for the current moment.
+                blended = 0.35 * typ_cong + 0.65 * live_level
+                live_drive = road_dist * _cong_rate(blended)
+                delta_min = live_drive - typ_drive
+                lv1, lv2, lv3 = st.columns(3)
+                lv1.metric(
+                    "Typical for this hour", f"{typ_cong:.1f} / 3",
+                    help="Historical average congestion at this hour from "
+                         "346K records — what we'd predict with no live data.")
+                lv2.metric(
+                    "Live on your route", f"{live_level:.1f} / 3",
+                    delta=f"{live_level - typ_cong:+.1f} vs typical",
+                    delta_color="inverse",
+                    help=f"Average of {n_live} camera(s) the VLM is watching "
+                         f"within ~0.8 km of your route, right now.")
+                lv3.metric(
+                    "Drive time now", f"{live_drive:.0f} min",
+                    delta=f"{delta_min:+.0f} min vs typical",
+                    delta_color="inverse",
+                    help="Drive time re-estimated using the live camera "
+                         "reading instead of the historical average.")
+                _dir = ("worse" if delta_min > 0.5 else
+                        "better" if delta_min < -0.5 else "about the same as")
+                st.caption(
+                    f"The VLM just analyzed {n_live} camera(s) on this route. "
+                    f"They read **{live_level:.1f}/3** vs the historical "
+                    f"**{typ_cong:.1f}/3**, so the live drive-time estimate is "
+                    f"**{_dir}** typical ({delta_min:+.0f} min). Re-runs every "
+                    f"sweep as new video comes in.")
+            else:
+                st.caption(
+                    "No VLM cameras on this route have reported yet — the "
+                    "estimate above is the historical average only. As the "
+                    "live sweep reaches cameras along this route, a live "
+                    "adjustment will appear here.")
 
             st.markdown('<div class="cc-panel-title" style="margin-top:8px">'
                         'Departure Window Analysis</div>',
